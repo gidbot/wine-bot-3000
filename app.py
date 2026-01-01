@@ -10,12 +10,15 @@ import json
 import hashlib
 import re
 import sqlite3
+import uuid
+import base64
+import shutil
 from contextlib import contextmanager
 import requests
 import urllib3
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify, send_file, render_template_string
 
 import anthropic
 
@@ -32,11 +35,16 @@ app = Flask(__name__)
 WINE_LABS_BASE_URL = "https://external-api.wine-labs.com"
 WINE_LABS_USER_ID = "58a3031a-7518-4b30-a53f-3828d0a7edac"
 
-# Cache configuration
-# Use persistent disk in production (/var/data on Render), local file in development
-CACHE_DIR = os.environ.get("CACHE_DIR", os.path.dirname(__file__))
-CACHE_DB = os.path.join(CACHE_DIR, "wine_cache.db")
+# Storage configuration
+# Use persistent disk in production (/var/data on Render), local directory in development
+STORAGE_DIR = os.environ.get("CACHE_DIR", os.path.dirname(__file__))
+CACHE_DB = os.path.join(STORAGE_DIR, "wine_cache.db")
 CACHE_TTL_HOURS = 24  # Cache expires after 24 hours (set to 0 to never expire)
+
+# Shareable analyses configuration
+ANALYSES_DB = os.path.join(STORAGE_DIR, "analyses.db")
+IMAGES_DIR = os.path.join(STORAGE_DIR, "images")
+ANALYSIS_EXPIRY_DAYS = 7  # Shared analyses expire after 7 days
 
 # Glass pour estimation - standard 5oz pour = 5 glasses per 750ml bottle
 GLASSES_PER_BOTTLE = 5
@@ -169,6 +177,197 @@ class APICache:
 
 # Global cache instance
 cache = APICache(CACHE_DB, CACHE_TTL_HOURS)
+
+
+# =============================================================================
+# Analyses Storage (for shareable links)
+# =============================================================================
+
+class AnalysesStore:
+    """
+    SQLite-based storage for shareable wine analyses.
+    Stores analysis results and manages image files with automatic expiration.
+    """
+    
+    def __init__(self, db_path: str, images_dir: str, expiry_days: int = 7):
+        self.db_path = db_path
+        self.images_dir = images_dir
+        self.expiry_days = expiry_days
+        self._init_storage()
+    
+    def _init_storage(self):
+        """Initialize database and images directory."""
+        # Create images directory if it doesn't exist
+        os.makedirs(self.images_dir, exist_ok=True)
+        
+        # Initialize database
+        with self._get_conn() as conn:
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS analyses (
+                    id TEXT PRIMARY KEY,
+                    image_filename TEXT NOT NULL,
+                    results_json TEXT NOT NULL,
+                    wine_count INTEGER DEFAULT 0,
+                    matched_count INTEGER DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    expires_at TIMESTAMP NOT NULL
+                )
+            ''')
+            conn.execute('CREATE INDEX IF NOT EXISTS idx_expires_at ON analyses(expires_at)')
+    
+    @contextmanager
+    def _get_conn(self):
+        """Context manager for database connections."""
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        try:
+            yield conn
+            conn.commit()
+        finally:
+            conn.close()
+    
+    def cleanup_expired(self):
+        """Remove expired analyses and their image files."""
+        with self._get_conn() as conn:
+            # Find expired records
+            expired = conn.execute(
+                "SELECT id, image_filename FROM analyses WHERE expires_at < ?",
+                (datetime.now().isoformat(),)
+            ).fetchall()
+            
+            # Delete image files
+            for record in expired:
+                image_path = os.path.join(self.images_dir, record["image_filename"])
+                if os.path.exists(image_path):
+                    try:
+                        os.remove(image_path)
+                        print(f"Deleted expired image: {record['image_filename']}")
+                    except OSError as e:
+                        print(f"Error deleting image {record['image_filename']}: {e}")
+            
+            # Delete database records
+            if expired:
+                conn.execute("DELETE FROM analyses WHERE expires_at < ?", 
+                           (datetime.now().isoformat(),))
+                print(f"Cleaned up {len(expired)} expired analyses")
+            
+            return len(expired)
+    
+    def save_analysis(self, image_base64: str, media_type: str, results: dict) -> str:
+        """
+        Save an analysis with its image.
+        
+        Returns the unique ID for the shareable link.
+        """
+        # Run cleanup first
+        self.cleanup_expired()
+        
+        # Generate unique ID
+        analysis_id = str(uuid.uuid4())[:12]  # Short ID for nicer URLs
+        
+        # Determine file extension from media type
+        ext_map = {
+            'image/jpeg': '.jpg',
+            'image/png': '.png',
+            'image/webp': '.webp',
+            'image/heic': '.heic',
+        }
+        ext = ext_map.get(media_type, '.jpg')
+        image_filename = f"{analysis_id}{ext}"
+        
+        # Save image file
+        image_path = os.path.join(self.images_dir, image_filename)
+        image_data = base64.b64decode(image_base64)
+        with open(image_path, 'wb') as f:
+            f.write(image_data)
+        
+        # Calculate expiration
+        expires_at = datetime.now() + timedelta(days=self.expiry_days)
+        
+        # Save to database
+        with self._get_conn() as conn:
+            conn.execute('''
+                INSERT INTO analyses (id, image_filename, results_json, wine_count, matched_count, expires_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (
+                analysis_id,
+                image_filename,
+                json.dumps(results),
+                results.get("total_wines", 0),
+                results.get("matched_wines", 0),
+                expires_at.isoformat()
+            ))
+        
+        return analysis_id
+    
+    def get_analysis(self, analysis_id: str) -> Optional[dict]:
+        """
+        Retrieve an analysis by ID.
+        
+        Returns None if not found or expired.
+        """
+        # Run cleanup first
+        self.cleanup_expired()
+        
+        with self._get_conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM analyses WHERE id = ? AND expires_at > ?",
+                (analysis_id, datetime.now().isoformat())
+            ).fetchone()
+            
+            if not row:
+                return None
+            
+            # Check if image file exists
+            image_path = os.path.join(self.images_dir, row["image_filename"])
+            if not os.path.exists(image_path):
+                return None
+            
+            return {
+                "id": row["id"],
+                "image_filename": row["image_filename"],
+                "results": json.loads(row["results_json"]),
+                "wine_count": row["wine_count"],
+                "matched_count": row["matched_count"],
+                "created_at": row["created_at"],
+                "expires_at": row["expires_at"]
+            }
+    
+    def get_image_path(self, analysis_id: str) -> Optional[str]:
+        """Get the file path for an analysis's image."""
+        with self._get_conn() as conn:
+            row = conn.execute(
+                "SELECT image_filename FROM analyses WHERE id = ? AND expires_at > ?",
+                (analysis_id, datetime.now().isoformat())
+            ).fetchone()
+            
+            if not row:
+                return None
+            
+            image_path = os.path.join(self.images_dir, row["image_filename"])
+            return image_path if os.path.exists(image_path) else None
+    
+    def stats(self) -> dict:
+        """Get storage statistics."""
+        with self._get_conn() as conn:
+            total = conn.execute("SELECT COUNT(*) FROM analyses").fetchone()[0]
+            
+            # Calculate total image size
+            total_size = 0
+            for filename in os.listdir(self.images_dir):
+                filepath = os.path.join(self.images_dir, filename)
+                if os.path.isfile(filepath):
+                    total_size += os.path.getsize(filepath)
+            
+            return {
+                "total_analyses": total,
+                "total_image_size_mb": round(total_size / (1024 * 1024), 2),
+                "expiry_days": self.expiry_days
+            }
+
+
+# Global analyses store instance
+analyses_store = AnalysesStore(ANALYSES_DB, IMAGES_DIR, ANALYSIS_EXPIRY_DAYS)
 
 
 # =============================================================================
@@ -811,6 +1010,341 @@ def clear_cache():
     """Clear the cache."""
     cache.clear()
     return jsonify({"success": True, "message": "Cache cleared"})
+
+
+# =============================================================================
+# Shareable Analyses Routes
+# =============================================================================
+
+@app.route("/save", methods=["POST"])
+def save_analysis():
+    """
+    Save an analysis for sharing.
+    
+    Expects JSON with:
+    - image: base64-encoded image data
+    - media_type: MIME type
+    - results: the analysis results object
+    
+    Returns JSON with shareable ID.
+    """
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({"error": "No data provided"}), 400
+        
+        image_base64 = data.get("image")
+        media_type = data.get("media_type", "image/jpeg")
+        results = data.get("results")
+        
+        if not image_base64:
+            return jsonify({"error": "No image provided"}), 400
+        if not results:
+            return jsonify({"error": "No results provided"}), 400
+        
+        # Remove data URL prefix if present
+        if "," in image_base64:
+            image_base64 = image_base64.split(",")[1]
+        
+        # Save the analysis
+        analysis_id = analyses_store.save_analysis(image_base64, media_type, results)
+        
+        return jsonify({
+            "success": True,
+            "id": analysis_id,
+            "expires_in_days": ANALYSIS_EXPIRY_DAYS
+        })
+        
+    except Exception as e:
+        print(f"Error saving analysis: {e}")
+        return jsonify({"error": f"Failed to save: {str(e)}"}), 500
+
+
+@app.route("/share/<analysis_id>")
+def view_shared_analysis(analysis_id):
+    """
+    View a shared analysis.
+    Returns the share page HTML.
+    """
+    analysis = analyses_store.get_analysis(analysis_id)
+    
+    if not analysis:
+        # Return expired/not found page
+        return render_template_string(SHARE_EXPIRED_HTML), 404
+    
+    # Return the share page with embedded data
+    return render_template_string(
+        SHARE_PAGE_HTML,
+        analysis_id=analysis_id,
+        analysis_data=json.dumps(analysis["results"]),
+        wine_count=analysis["wine_count"],
+        matched_count=analysis["matched_count"],
+        created_at=analysis["created_at"],
+        expires_at=analysis["expires_at"]
+    )
+
+
+@app.route("/share/<analysis_id>/image")
+def get_shared_image(analysis_id):
+    """Serve the image for a shared analysis."""
+    image_path = analyses_store.get_image_path(analysis_id)
+    
+    if not image_path:
+        return jsonify({"error": "Image not found"}), 404
+    
+    return send_file(image_path)
+
+
+@app.route("/share/<analysis_id>/data")
+def get_shared_data(analysis_id):
+    """Get the JSON data for a shared analysis."""
+    analysis = analyses_store.get_analysis(analysis_id)
+    
+    if not analysis:
+        return jsonify({"error": "Analysis not found or expired"}), 404
+    
+    return jsonify(analysis["results"])
+
+
+@app.route("/storage/stats", methods=["GET"])
+def storage_stats():
+    """Get storage statistics for shared analyses."""
+    return jsonify(analyses_store.stats())
+
+
+# =============================================================================
+# Share Page Templates
+# =============================================================================
+
+SHARE_PAGE_HTML = '''
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wine Bot 3000 - Shared Analysis</title>
+    <meta property="og:title" content="Wine Menu Analysis - Wine Bot 3000">
+    <meta property="og:description" content="Check out this wine menu markup analysis!">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600&family=Source+Sans+3:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0f0f14;
+            --bg-secondary: #1a1a24;
+            --bg-card: rgba(255, 255, 255, 0.03);
+            --border-subtle: rgba(255, 255, 255, 0.08);
+            --text-primary: #f5f5f7;
+            --text-secondary: #8e8e93;
+            --text-muted: #636366;
+            --accent-gold: #c9a227;
+            --accent-green: #34c759;
+            --accent-red: #ff453a;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Source Sans 3', sans-serif;
+            background: var(--bg-primary);
+            min-height: 100vh;
+            color: var(--text-primary);
+            background-image: 
+                radial-gradient(ellipse at 20% 0%, rgba(114, 47, 55, 0.15) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 100%, rgba(201, 162, 39, 0.08) 0%, transparent 50%);
+        }
+        .container { max-width: 1100px; margin: 0 auto; padding: 40px 24px; }
+        header { text-align: center; margin-bottom: 32px; }
+        h1 { font-family: 'Playfair Display', serif; font-size: 2rem; font-weight: 500; margin-bottom: 8px; }
+        h1 span { color: var(--accent-gold); }
+        .subtitle { color: var(--text-secondary); font-size: 0.95rem; }
+        .shared-badge { 
+            display: inline-block; 
+            background: rgba(201, 162, 39, 0.2); 
+            color: var(--accent-gold);
+            padding: 4px 12px; 
+            border-radius: 20px; 
+            font-size: 0.8rem;
+            margin-top: 12px;
+        }
+        .meta-info {
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            margin-bottom: 24px;
+        }
+        .results-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 16px;
+            overflow: hidden;
+        }
+        .results-table { width: 100%; border-collapse: collapse; }
+        .results-table th {
+            text-align: left;
+            padding: 14px 12px;
+            background: rgba(0, 0, 0, 0.2);
+            color: var(--text-muted);
+            font-weight: 500;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+        .results-table td {
+            padding: 16px 12px;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+        .results-table tbody tr:last-child td { border-bottom: none; }
+        .wine-name { font-weight: 500; }
+        .price { font-family: monospace; }
+        .price-menu { color: #e4c767; }
+        .price-retail { color: var(--accent-green); }
+        .markup-high { color: var(--accent-red); font-weight: 600; }
+        .markup-medium { color: #ff9f0a; font-weight: 600; }
+        .markup-low { color: var(--accent-green); font-weight: 600; }
+        .na { color: var(--text-muted); font-style: italic; }
+        .cta-section { text-align: center; margin-top: 40px; padding: 32px; background: var(--bg-card); border-radius: 16px; }
+        .cta-section h2 { font-family: 'Playfair Display', serif; font-size: 1.4rem; margin-bottom: 12px; }
+        .cta-section p { color: var(--text-secondary); margin-bottom: 20px; }
+        .cta-btn {
+            display: inline-block;
+            background: linear-gradient(135deg, var(--accent-gold), #a88620);
+            color: #0f0f14;
+            padding: 14px 32px;
+            border-radius: 12px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .cta-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(201, 162, 39, 0.3); }
+        footer { text-align: center; margin-top: 40px; color: var(--text-muted); font-size: 0.85rem; }
+        @media (max-width: 768px) {
+            .results-table { font-size: 0.85rem; }
+            .results-table th, .results-table td { padding: 10px 8px; }
+            .hide-mobile { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Wine Bot <span>3000</span></h1>
+            <p class="subtitle">Wine Menu Markup Analysis</p>
+            <span class="shared-badge">📤 Shared Analysis</span>
+        </header>
+        
+        <div class="meta-info">
+            {{ wine_count }} wines analyzed · {{ matched_count }} matched with retail prices
+        </div>
+        
+        <div class="results-card">
+            <table class="results-table">
+                <thead>
+                    <tr>
+                        <th>Wine</th>
+                        <th class="hide-mobile">Vintage</th>
+                        <th>Menu</th>
+                        <th>Retail</th>
+                        <th>Markup</th>
+                    </tr>
+                </thead>
+                <tbody id="results-body"></tbody>
+            </table>
+        </div>
+        
+        <div class="cta-section">
+            <h2>Try it yourself!</h2>
+            <p>Snap a photo of any wine menu to reveal the markups</p>
+            <a href="/" class="cta-btn">🍷 Analyze a Menu</a>
+        </div>
+        
+        <footer>Wine Bot 3000</footer>
+    </div>
+    
+    <script>
+        const analysisData = {{ analysis_data | safe }};
+        const wines = analysisData.wines || [];
+        
+        function formatPrice(price) {
+            if (price === null || price === undefined) return '<span class="na">N/A</span>';
+            return '$' + price.toFixed(2);
+        }
+        
+        function formatMarkup(percent) {
+            if (percent === null || percent === undefined) return '<span class="na">N/A</span>';
+            let colorClass = 'markup-high';
+            if (percent < 50) colorClass = 'markup-low';
+            else if (percent < 100) colorClass = 'markup-medium';
+            return `<span class="${colorClass}">${percent.toFixed(0)}%</span>`;
+        }
+        
+        const tbody = document.getElementById('results-body');
+        wines.forEach(wine => {
+            const row = document.createElement('tr');
+            const displayName = wine.matched ? wine.display_name : wine.original_name;
+            row.innerHTML = `
+                <td class="wine-name">${displayName}</td>
+                <td class="hide-mobile">${wine.vintage || '—'}</td>
+                <td class="price price-menu">${formatPrice(wine.menu_price)}</td>
+                <td class="price price-retail">${formatPrice(wine.retail_price)}</td>
+                <td>${formatMarkup(wine.markup_percent)}</td>
+            `;
+            tbody.appendChild(row);
+        });
+    </script>
+</body>
+</html>
+'''
+
+SHARE_EXPIRED_HTML = '''
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wine Bot 3000 - Link Expired</title>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500&family=Source+Sans+3:wght@300;400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0f0f14;
+            --text-primary: #f5f5f7;
+            --text-secondary: #8e8e93;
+            --accent-gold: #c9a227;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Source Sans 3', sans-serif;
+            background: var(--bg-primary);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-primary);
+        }
+        .container { text-align: center; padding: 40px; max-width: 500px; }
+        .icon { font-size: 4rem; margin-bottom: 24px; opacity: 0.6; }
+        h1 { font-family: 'Playfair Display', serif; font-size: 2rem; margin-bottom: 16px; }
+        p { color: var(--text-secondary); margin-bottom: 32px; line-height: 1.6; }
+        .cta-btn {
+            display: inline-block;
+            background: linear-gradient(135deg, var(--accent-gold), #a88620);
+            color: #0f0f14;
+            padding: 14px 32px;
+            border-radius: 12px;
+            text-decoration: none;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="icon">🕐</div>
+        <h1>Link Expired</h1>
+        <p>This shared analysis is no longer available. Shared links expire after 7 days to keep things tidy.</p>
+        <a href="/" class="cta-btn">🍷 Analyze a New Menu</a>
+    </div>
+</body>
+</html>
+'''
 
 
 # =============================================================================

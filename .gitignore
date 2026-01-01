@@ -9,9 +9,13 @@ ENV/
 env/
 .venv/
 
-# SQLite cache database (regenerates automatically)
+# SQLite databases (regenerate automatically)
 *.db
 wine_cache.db
+analyses.db
+
+# Uploaded images (stored temporarily for sharing)
+images/
 
 # Environment variables (NEVER commit API keys!)
 .env

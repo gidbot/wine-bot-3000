@@ -929,6 +929,35 @@
             box-shadow: 0 8px 24px rgba(175, 82, 222, 0.3);
         }
 
+        /* Share Toast */
+        .share-toast {
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: var(--accent-green);
+            color: #0f0f14;
+            padding: 14px 24px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 500;
+            box-shadow: 0 8px 32px rgba(52, 199, 89, 0.3);
+            opacity: 0;
+            transition: transform 0.3s ease, opacity 0.3s ease;
+            z-index: 1001;
+        }
+
+        .share-toast.visible {
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
+        }
+
+        .share-toast-icon {
+            font-size: 1.2rem;
+        }
+
         /* Footer */
         footer {
             text-align: center;
@@ -1303,6 +1332,22 @@
                     </svg>
                     Analyze Another Menu
                 </button>
+                <button class="btn btn-primary" id="share-btn" style="display: none;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="18" cy="5" r="3"/>
+                        <circle cx="6" cy="12" r="3"/>
+                        <circle cx="18" cy="19" r="3"/>
+                        <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+                        <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+                    </svg>
+                    <span id="share-btn-text">Share Results</span>
+                </button>
+            </div>
+            
+            <!-- Share Success Toast -->
+            <div class="share-toast" id="share-toast">
+                <span class="share-toast-icon">✓</span>
+                <span class="share-toast-text">Link copied to clipboard!</span>
             </div>
         </section>
 
@@ -1324,6 +1369,9 @@
         const analyzeBtn = document.getElementById('analyze-btn');
         const clearBtn = document.getElementById('clear-btn');
         const newAnalysisBtn = document.getElementById('new-analysis-btn');
+        const shareBtn = document.getElementById('share-btn');
+        const shareBtnText = document.getElementById('share-btn-text');
+        const shareToast = document.getElementById('share-toast');
         const previewImage = document.getElementById('preview-image');
         const previewFilename = document.getElementById('preview-filename');
         const previewSize = document.getElementById('preview-size');
@@ -1348,6 +1396,7 @@
         let currentFile = null;
         let currentBase64 = null;
         let winesData = [];
+        let currentResults = null;  // Store full results for sharing
         let currentSort = { field: 'markup_percent', direction: 'asc' };
 
         // Reusable SVG Icons
@@ -1674,13 +1723,84 @@
         newAnalysisBtn.addEventListener('click', () => {
             currentFile = null;
             currentBase64 = null;
+            currentResults = null;
             fileInput.value = '';
             cameraInput.value = '';
             previewSection.classList.remove('active');
             resultsSection.classList.remove('active');
             uploadSection.style.display = 'block';
+            shareBtn.style.display = 'none';
             hideError();
         });
+
+        // Share button handler
+        shareBtn.addEventListener('click', async () => {
+            if (!currentBase64 || !currentResults) {
+                showError('No analysis to share');
+                return;
+            }
+            
+            // Update button state
+            shareBtnText.textContent = 'Saving...';
+            shareBtn.disabled = true;
+            
+            try {
+                // Get media type from base64 data URL
+                const mediaType = currentBase64.split(';')[0].split(':')[1] || 'image/jpeg';
+                
+                // Remove data URL prefix for sending
+                const imageData = currentBase64.includes(',') 
+                    ? currentBase64.split(',')[1] 
+                    : currentBase64;
+                
+                const response = await fetch('/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        image: imageData,
+                        media_type: mediaType,
+                        results: currentResults
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (!response.ok || data.error) {
+                    throw new Error(data.error || 'Failed to save');
+                }
+                
+                // Build shareable URL
+                const shareUrl = `${window.location.origin}/share/${data.id}`;
+                
+                // Copy to clipboard
+                await navigator.clipboard.writeText(shareUrl);
+                
+                // Show success toast
+                showShareToast();
+                
+                // Update button
+                shareBtnText.textContent = 'Link Copied!';
+                setTimeout(() => {
+                    shareBtnText.textContent = 'Share Results';
+                    shareBtn.disabled = false;
+                }, 2000);
+                
+            } catch (error) {
+                console.error('Share error:', error);
+                shareBtnText.textContent = 'Share Failed';
+                setTimeout(() => {
+                    shareBtnText.textContent = 'Share Results';
+                    shareBtn.disabled = false;
+                }, 2000);
+            }
+        });
+        
+        function showShareToast() {
+            shareToast.classList.add('visible');
+            setTimeout(() => {
+                shareToast.classList.remove('visible');
+            }, 3000);
+        }
 
         // Try Again button handler (no wines found)
         tryAgainBtn.addEventListener('click', () => {
@@ -1915,6 +2035,9 @@
             // Store wines data for sorting
             winesData = data.wines;
             
+            // Store full results for sharing
+            currentResults = data;
+            
             // Update meta info
             totalWinesSpan.innerHTML = `${ICONS.wine} ${data.total_wines} wine${data.total_wines !== 1 ? 's' : ''} found`;
             matchedWinesSpan.innerHTML = `${ICONS.check} ${data.matched_wines} matched`;
@@ -1926,9 +2049,10 @@
             // Render table
             renderWinesTable();
 
-            // Show results section
+            // Show results section and share button
             previewSection.classList.remove('active');
             resultsSection.classList.add('active');
+            shareBtn.style.display = 'inline-flex';
         }
 
         // Set up sortable column click handlers
