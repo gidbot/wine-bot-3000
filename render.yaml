@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: wine-bot-3000
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --timeout 120
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false  # You'll set this manually in Render dashboard
+      - key: PYTHON_VERSION
+        value: "3.11"
+      - key: CACHE_DIR
+        value: /var/data
+    disk:
+      name: wine-cache
+      mountPath: /var/data
+      sizeGB: 1
+
