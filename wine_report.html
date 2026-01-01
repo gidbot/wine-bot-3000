@@ -729,19 +729,12 @@
             display: inline-block;
             margin-left: 4px;
             font-size: 0.7rem;
-            opacity: 0.5;
+            opacity: 0;
+            transition: opacity 0.2s ease;
         }
 
         .sortable.active .sort-icon {
             opacity: 1;
-        }
-
-        .sortable.desc .sort-icon::after {
-            content: '▼';
-        }
-
-        .sortable.asc .sort-icon::after {
-            content: '▲';
         }
 
         /* Error State */

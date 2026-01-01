@@ -43,7 +43,7 @@ GLASSES_PER_BOTTLE = 5
 
 # API Timeout Configuration (in seconds)
 CLAUDE_TIMEOUT = 60  # Claude Vision can be slow with large images
-WINE_LABS_TIMEOUT = 15  # Wine Labs API timeout per request
+WINE_LABS_TIMEOUT = 30  # Wine Labs API timeout per request
 
 # Anthropic API key from environment
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
