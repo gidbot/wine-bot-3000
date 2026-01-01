@@ -33,7 +33,7 @@ app = Flask(__name__)
 
 # Wine Labs API Configuration
 WINE_LABS_BASE_URL = "https://external-api.wine-labs.com"
-WINE_LABS_USER_ID = "58a3031a-7518-4b30-a53f-3828d0a7edac"
+WINE_LABS_USER_ID = os.environ.get("WINE_LABS_USER_ID", "")
 
 # Storage configuration
 # Use persistent disk in production (/var/data on Render), local directory in development
@@ -1358,11 +1358,17 @@ if __name__ == "__main__":
     print(f"Cache database: {CACHE_DB}")
     print(f"Cache TTL: {CACHE_TTL_HOURS} hours")
     print(f"Anthropic API Key: {'Set' if ANTHROPIC_API_KEY else 'NOT SET'}")
+    print(f"Wine Labs User ID: {'Set' if WINE_LABS_USER_ID else 'NOT SET'}")
     print()
     
     if not ANTHROPIC_API_KEY:
         print("WARNING: ANTHROPIC_API_KEY environment variable not set!")
         print("Set it with: export ANTHROPIC_API_KEY='your-key-here'")
+        print()
+    
+    if not WINE_LABS_USER_ID:
+        print("WARNING: WINE_LABS_USER_ID environment variable not set!")
+        print("Set it with: export WINE_LABS_USER_ID='your-user-id-here'")
         print()
     
     app.run(debug=True, host="0.0.0.0", port=5000)

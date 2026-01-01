@@ -7,6 +7,8 @@ services:
     envVars:
       - key: ANTHROPIC_API_KEY
         sync: false  # You'll set this manually in Render dashboard
+      - key: WINE_LABS_USER_ID
+        sync: false  # You'll set this manually in Render dashboard
       - key: PYTHON_VERSION
         value: "3.11"
       - key: CACHE_DIR
