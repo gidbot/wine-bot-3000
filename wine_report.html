@@ -539,6 +539,11 @@
             color: var(--text-muted);
         }
 
+        .source-badge.global-stats {
+            background: rgba(138, 180, 248, 0.15);
+            color: #8ab4f8;
+        }
+
         /* Glass Pour Styling */
         .glass-price-display {
             display: flex;
@@ -1457,6 +1462,8 @@
                 return '<span class="source-badge us-listings">US</span>';
             } else if (source === 'na_stats') {
                 return '<span class="source-badge na-stats">NORAM</span>';
+            } else if (source === 'global_stats') {
+                return '<span class="source-badge global-stats">GLOBAL</span>';
             }
             return '';
         }

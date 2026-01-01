@@ -392,8 +392,9 @@ def analyze_menu_with_claude(image_base64: str, media_type: str = "image/jpeg") 
     prompt = """Analyze this wine menu image and extract all wines listed with their prices.
 
 CRITICAL RULES:
-1. NEVER include grape variety names (Chardonnay, Pinot Noir, Cabernet Sauvignon, Merlot, etc.) in the wine name - these are NOT part of how wines are named in databases
-2. Wine menus often organize wines under category headers - use these to infer region/appellation ONLY
+1. PRODUCER NAME ALWAYS COMES FIRST - this is essential for wine database matching
+2. NEVER include grape variety names (Chardonnay, Pinot Noir, Cabernet Sauvignon, Merlot, Fiano, Grillo, etc.) in the wine name - these are NOT part of how wines are named in databases
+3. Wine menus often organize wines under category headers - use these to infer region/appellation ONLY
 
 FORMAT BY REGION:
 
@@ -417,8 +418,20 @@ BORDEAUX: Use format "Château Name Appellation"
 - "Château Margaux"
 - "Château Latour Pauillac"
 
+ITALIAN WINES: Use format "Producer Appellation 'CuvéeName'" - PRODUCER FIRST!
+- "Biondi Etna Bianco 'Outis'" (NOT "Etna Bianco DOC 'Outis' Biondi")
+- "Maugeri Etna Bianco Superiore 'Contrada Volpare'"
+- "Ayunta Etna Bianco 'Piante Sparse'"
+- "Ciro Picariello Fiano di Avellino"
+- "Centopassi Terre Siciliane 'Rocce di Pietra Longa'"
+- "Gaja Barbaresco"
+- "Produttori del Barbaresco Barbaresco"
+- "Vietti Barolo"
+- For Italian wines: Producer FIRST, then DOC/DOCG appellation, then vineyard/cuvée name in quotes
+
 OTHER REGIONS: Producer + Appellation/Region
 - Keep it simple and searchable
+- Producer name ALWAYS comes first
 
 GLASS vs BOTTLE:
 - Look for indicators like "glass", "gl", "/gl", "by the glass", or a "Glass" column/section
@@ -514,17 +527,34 @@ Return ONLY the JSON array, no other text. Example format:
 # Wine Labs API Functions
 # =============================================================================
 
-def cached_post(endpoint: str, payload: dict) -> Optional[dict]:
+def cached_post(endpoint: str, payload: dict, cache_empty_results: bool = True) -> Optional[dict]:
     """
     Make a cached POST request to Wine Labs API.
+    
+    Args:
+        endpoint: API endpoint path
+        payload: Request payload
+        cache_empty_results: If False, don't cache responses with empty "results" arrays.
+                            This allows retrying later when data might be available.
     
     Returns None on failure (timeout, connection error, or API error).
     Failures are logged but don't raise exceptions - allows partial results.
     """
     cached_response = cache.get(endpoint, payload)
     if cached_response is not None:
-        print(f"[CACHED] {endpoint}")
-        return cached_response
+        # If we cached an empty result and cache_empty_results is False,
+        # ignore the cache and try again (data might be available now)
+        if not cache_empty_results:
+            results = cached_response.get("results", [])
+            if not results:
+                print(f"[CACHE SKIP - empty results] {endpoint}")
+                # Fall through to make a fresh API call
+            else:
+                print(f"[CACHED] {endpoint}")
+                return cached_response
+        else:
+            print(f"[CACHED] {endpoint}")
+            return cached_response
     
     print(f"[API CALL] {endpoint}")
     url = f"{WINE_LABS_BASE_URL}{endpoint}"
@@ -541,7 +571,14 @@ def cached_post(endpoint: str, payload: dict) -> Optional[dict]:
             return None
         
         data = response.json()
-        cache.set(endpoint, payload, data)
+        
+        # Only cache if we have results OR if caching empty results is allowed
+        results = data.get("results", [])
+        if results or cache_empty_results:
+            cache.set(endpoint, payload, data)
+        else:
+            print(f"  [NOT CACHING - no results found]")
+        
         return data
     except requests.exceptions.Timeout:
         print(f"  Wine Labs API timeout for {endpoint}")
@@ -554,14 +591,117 @@ def cached_post(endpoint: str, payload: dict) -> Optional[dict]:
         return None
 
 
+def generate_alternative_queries(original_query: str) -> List[str]:
+    """
+    Generate alternative query formats for a wine that didn't match.
+    
+    Takes a query like "Ayunta Etna Bianco 'Piante Sparse' 2022"
+    and generates alternatives like:
+    - "Ayunta Piante Sparse Etna Bianco 2022" (cuvée moved before appellation)
+    - "Ayunta Piante Sparse 2022" (simplified, no appellation)
+    - "Ayunta Etna Bianco Piante Sparse 2022" (no quotes)
+    """
+    alternatives = []
+    
+    # Extract vintage (4 digits at the end)
+    vintage_match = re.search(r'\s*(\d{4})\s*$', original_query)
+    vintage = vintage_match.group(1) if vintage_match else ""
+    query_no_vintage = re.sub(r'\s*\d{4}\s*$', '', original_query).strip()
+    
+    # Extract content in quotes (cuvée name)
+    quote_match = re.search(r"['\"]([^'\"]+)['\"]", query_no_vintage)
+    
+    if quote_match:
+        cuvee = quote_match.group(1)
+        # Remove the quoted part from the query
+        query_no_cuvee = re.sub(r"['\"][^'\"]+['\"]", '', query_no_vintage).strip()
+        # Clean up extra spaces
+        query_no_cuvee = ' '.join(query_no_cuvee.split())
+        
+        # Alternative 1: Cuvée moved to after producer (assume first word is producer)
+        parts = query_no_cuvee.split()
+        if len(parts) >= 2:
+            producer = parts[0]
+            appellation = ' '.join(parts[1:])
+            # Format: Producer Cuvée Appellation Vintage
+            alt1 = f"{producer} {cuvee} {appellation}"
+            if vintage:
+                alt1 += f" {vintage}"
+            alternatives.append(alt1)
+        
+        # Alternative 2: Simplified - just producer and cuvée
+        if len(parts) >= 1:
+            producer = parts[0]
+            alt2 = f"{producer} {cuvee}"
+            if vintage:
+                alt2 += f" {vintage}"
+            alternatives.append(alt2)
+        
+        # Alternative 3: No quotes version
+        alt3 = query_no_cuvee.replace("  ", " ") + " " + cuvee
+        if vintage:
+            alt3 += f" {vintage}"
+        alternatives.append(alt3.strip())
+    else:
+        # No quotes found - try simplifying
+        parts = query_no_vintage.split()
+        if len(parts) >= 3:
+            # Try just first two words + vintage
+            alt = ' '.join(parts[:2])
+            if vintage:
+                alt += f" {vintage}"
+            alternatives.append(alt)
+    
+    # Remove duplicates and the original query
+    seen = set()
+    unique_alternatives = []
+    for alt in alternatives:
+        alt_clean = alt.strip()
+        if alt_clean and alt_clean not in seen and alt_clean != original_query:
+            seen.add(alt_clean)
+            unique_alternatives.append(alt_clean)
+    
+    return unique_alternatives
+
+
+def match_single_wine(query: str) -> Optional[Dict]:
+    """
+    Match a single wine query to LWIN using /match_to_lwin endpoint.
+    Returns {display_name, lwin} or None if no match.
+    """
+    payload = {
+        "user_id": WINE_LABS_USER_ID,
+        "query": query
+    }
+    
+    data = cached_post("/match_to_lwin", payload)
+    
+    if data is None:
+        return None
+    
+    # /match_to_lwin returns the result directly, not in a "results" array
+    lwin = data.get("lwin")
+    display_name = data.get("display_name", query)
+    
+    if lwin:
+        return {
+            "display_name": display_name,
+            "lwin": str(lwin)
+        }
+    
+    return None
+
+
 def match_wines_to_lwin(queries: List[str]) -> Dict[str, Dict]:
     """
     Match wine queries to LWIN codes using batch endpoint.
+    For unmatched wines, retry with alternative query formats using single endpoint.
     Returns dict mapping query -> {display_name, lwin}
     """
     if not queries:
         return {}
     
+    # Step 1: Batch match all wines
     payload = {
         "user_id": WINE_LABS_USER_ID,
         "queries": queries
@@ -570,11 +710,18 @@ def match_wines_to_lwin(queries: List[str]) -> Dict[str, Dict]:
     data = cached_post("/match_to_lwin_batch", payload)
     
     if data is None:
+        print("  [MATCH] API returned None")
         return {q: {"display_name": q, "lwin": None} for q in queries}
     
     api_results = data.get("results", [])
     
+    print(f"\n{'='*60}")
+    print("WINE LABS MATCHING RESULTS (Batch):")
+    print(f"{'='*60}")
+    
     results = {}
+    unmatched_queries = []  # Track queries that need retry
+    
     for i, query in enumerate(queries):
         if i < len(api_results):
             match_data = api_results[i]
@@ -587,12 +734,56 @@ def match_wines_to_lwin(queries: List[str]) -> Dict[str, Dict]:
                         "display_name": display_name,
                         "lwin": str(lwin)
                     }
+                    print(f"  ✓ '{query}'")
+                    print(f"    → LWIN: {lwin}")
+                    print(f"    → Display: {display_name}")
                 else:
                     results[query] = {"display_name": query, "lwin": None}
+                    unmatched_queries.append(query)
+                    print(f"  ✗ '{query}' - No LWIN match (will retry)")
             else:
                 results[query] = {"display_name": query, "lwin": None}
+                unmatched_queries.append(query)
+                print(f"  ✗ '{query}' - Invalid response (will retry)")
         else:
             results[query] = {"display_name": query, "lwin": None}
+            unmatched_queries.append(query)
+            print(f"  ✗ '{query}' - No result returned (will retry)")
+    
+    print(f"{'='*60}\n")
+    
+    # Step 2: Retry unmatched wines with alternative query formats
+    if unmatched_queries:
+        print(f"{'='*60}")
+        print(f"RETRYING {len(unmatched_queries)} UNMATCHED WINES:")
+        print(f"{'='*60}")
+        
+        for original_query in unmatched_queries:
+            alternatives = generate_alternative_queries(original_query)
+            
+            if not alternatives:
+                print(f"  ✗ '{original_query}' - No alternative queries to try")
+                continue
+            
+            print(f"  Trying alternatives for: '{original_query}'")
+            
+            matched = False
+            for alt_query in alternatives:
+                print(f"    → Trying: '{alt_query}'")
+                
+                match_result = match_single_wine(alt_query)
+                
+                if match_result and match_result.get("lwin"):
+                    results[original_query] = match_result
+                    print(f"    ✓ MATCHED! LWIN: {match_result['lwin']}")
+                    print(f"      Display: {match_result['display_name']}")
+                    matched = True
+                    break
+            
+            if not matched:
+                print(f"    ✗ No match found with any alternative")
+        
+        print(f"{'='*60}\n")
     
     return results
 
@@ -625,7 +816,8 @@ def get_retail_price(lwin: str) -> dict:
         "offset": 0
     }
     
-    listings_data = cached_post("/listings", listings_payload)
+    # Don't cache empty results - price data may become available later
+    listings_data = cached_post("/listings", listings_payload, cache_empty_results=False)
     
     if listings_data:
         listings_results = listings_data.get("results", [])
@@ -671,7 +863,8 @@ def get_retail_price(lwin: str) -> dict:
         "currency": "USD"
     }
     
-    stats_data = cached_post("/price_stats", stats_payload)
+    # Don't cache empty results - price data may become available later
+    stats_data = cached_post("/price_stats", stats_payload, cache_empty_results=False)
     
     if stats_data:
         stats_results = stats_data.get("results", [])
@@ -686,6 +879,63 @@ def get_retail_price(lwin: str) -> dict:
                 result["source"] = "na_stats"
                 # No individual listings for stats endpoint
                 return result
+    
+    # Step 3: Final fallback to GLOBAL price stats (no region filter)
+    # Many wines (especially European) may not have US/NA pricing but have global prices
+    global_stats_payload = {
+        "user_id": WINE_LABS_USER_ID,
+        "lwin": lwin,
+        "currency": "USD"
+    }
+    
+    print(f"  [DEBUG] Global price_stats for LWIN: {lwin}")
+    global_stats_data = cached_post("/price_stats", global_stats_payload, cache_empty_results=False)
+    
+    if global_stats_data:
+        global_results = global_stats_data.get("results", [])
+        print(f"  [DEBUG] Global results count: {len(global_results)}")
+        
+        if global_results:
+            stats = global_results[0]
+            winelabs_price = stats.get("winelabs_price")
+            print(f"  [DEBUG] winelabs_price: {winelabs_price}")
+            
+            if winelabs_price is not None:
+                result["price"] = float(winelabs_price)
+                result["count"] = stats.get("count", 0)
+                result["source"] = "global_stats"  # Indicate this is global pricing
+                return result
+    else:
+        print(f"  [DEBUG] Global price_stats returned None")
+    
+    # Step 4: Try with base LWIN (first 7 digits) - some endpoints need this format
+    # LWIN format: XXXXXXX + YYYY + FF + SSSSS (base + vintage + format + size)
+    if len(lwin) > 7:
+        base_lwin = lwin[:7]
+        print(f"  [DEBUG] Trying base LWIN: {base_lwin}")
+        
+        base_stats_payload = {
+            "user_id": WINE_LABS_USER_ID,
+            "lwin": base_lwin,
+            "currency": "USD"
+        }
+        
+        base_stats_data = cached_post("/price_stats", base_stats_payload, cache_empty_results=False)
+        
+        if base_stats_data:
+            base_results = base_stats_data.get("results", [])
+            print(f"  [DEBUG] Base LWIN results count: {len(base_results)}")
+            
+            if base_results:
+                stats = base_results[0]
+                winelabs_price = stats.get("winelabs_price")
+                print(f"  [DEBUG] Base LWIN winelabs_price: {winelabs_price}")
+                
+                if winelabs_price is not None:
+                    result["price"] = float(winelabs_price)
+                    result["count"] = stats.get("count", 0)
+                    result["source"] = "global_stats"
+                    return result
     
     return result
 
