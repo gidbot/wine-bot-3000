@@ -1467,10 +1467,107 @@ SHARE_PAGE_HTML = '''
         }
         .cta-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(201, 162, 39, 0.3); }
         footer { text-align: center; margin-top: 40px; color: var(--text-muted); font-size: 0.85rem; }
+        
+        /* Menu Image Section */
+        .menu-image-section {
+            margin-bottom: 24px;
+        }
+        .image-toggle {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 12px 20px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 0.9rem;
+        }
+        .image-toggle:hover {
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-primary);
+        }
+        .image-toggle svg {
+            width: 18px;
+            height: 18px;
+            transition: transform 0.3s;
+        }
+        .image-toggle.expanded svg {
+            transform: rotate(180deg);
+        }
+        .image-container {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.4s ease-out, padding 0.4s ease-out;
+            background: var(--bg-card);
+            border-radius: 0 0 12px 12px;
+            margin-top: -12px;
+            border: 1px solid var(--border-subtle);
+            border-top: none;
+        }
+        .image-container.expanded {
+            max-height: 600px;
+            padding: 16px;
+        }
+        .menu-image {
+            width: 100%;
+            max-height: 500px;
+            object-fit: contain;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        .menu-image:hover {
+            opacity: 0.9;
+        }
+        
+        /* Lightbox */
+        .lightbox {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.95);
+            z-index: 1000;
+            cursor: zoom-out;
+            padding: 20px;
+        }
+        .lightbox.active {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .lightbox img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            border-radius: 8px;
+        }
+        .lightbox-close {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            color: white;
+            font-size: 2rem;
+            cursor: pointer;
+            opacity: 0.7;
+            transition: opacity 0.2s;
+        }
+        .lightbox-close:hover {
+            opacity: 1;
+        }
+        
         @media (max-width: 768px) {
             .results-table { font-size: 0.85rem; }
             .results-table th, .results-table td { padding: 10px 8px; }
             .hide-mobile { display: none; }
+            .image-container.expanded { max-height: 400px; }
+            .menu-image { max-height: 350px; }
         }
     </style>
 </head>
@@ -1484,6 +1581,24 @@ SHARE_PAGE_HTML = '''
         
         <div class="meta-info">
             {{ wine_count }} wines analyzed · {{ matched_count }} matched with retail prices
+        </div>
+        
+        <!-- Menu Image Section -->
+        <div class="menu-image-section">
+            <div class="image-toggle" onclick="toggleImage()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                    <circle cx="8.5" cy="8.5" r="1.5"/>
+                    <polyline points="21 15 16 10 5 21"/>
+                </svg>
+                <span id="toggle-text">View Original Menu</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px;">
+                    <polyline points="6 9 12 15 18 9"/>
+                </svg>
+            </div>
+            <div class="image-container" id="image-container">
+                <img src="/share/{{ analysis_id }}/image" alt="Original wine menu" class="menu-image" onclick="openLightbox()">
+            </div>
         </div>
         
         <div class="results-card">
@@ -1510,7 +1625,40 @@ SHARE_PAGE_HTML = '''
         <footer>Wine Bot 3000</footer>
     </div>
     
+    <!-- Lightbox for full-size image -->
+    <div class="lightbox" id="lightbox" onclick="closeLightbox()">
+        <span class="lightbox-close">&times;</span>
+        <img src="/share/{{ analysis_id }}/image" alt="Original wine menu">
+    </div>
+    
     <script>
+        // Image toggle and lightbox functions
+        function toggleImage() {
+            const container = document.getElementById('image-container');
+            const toggle = document.querySelector('.image-toggle');
+            const toggleText = document.getElementById('toggle-text');
+            
+            container.classList.toggle('expanded');
+            toggle.classList.toggle('expanded');
+            toggleText.textContent = container.classList.contains('expanded') 
+                ? 'Hide Original Menu' 
+                : 'View Original Menu';
+        }
+        
+        function openLightbox() {
+            document.getElementById('lightbox').classList.add('active');
+            document.body.style.overflow = 'hidden';
+        }
+        
+        function closeLightbox() {
+            document.getElementById('lightbox').classList.remove('active');
+            document.body.style.overflow = '';
+        }
+        
+        // Close lightbox on Escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeLightbox();
+        });
         const analysisData = {{ analysis_data | safe }};
         const wines = analysisData.wines || [];
         
