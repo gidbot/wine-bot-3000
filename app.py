@@ -374,9 +374,14 @@ analyses_store = AnalysesStore(ANALYSES_DB, IMAGES_DIR, ANALYSIS_EXPIRY_DAYS)
 # Claude Vision Integration
 # =============================================================================
 
-def analyze_menu_with_claude(image_base64: str, media_type: str = "image/jpeg") -> List[Dict]:
+def analyze_menu_with_claude(image_base64: str, media_type: str = "image/jpeg", user_context: str = "") -> List[Dict]:
     """
     Use Claude Vision to analyze a wine menu image and extract wine information.
+    
+    Args:
+        image_base64: Base64-encoded image data
+        media_type: MIME type of the image
+        user_context: Optional user-provided context about the menu
     
     Returns a list of dicts with keys: name, vintage, price
     Raises: TimeoutError, ConnectionError, or ValueError on failure
@@ -389,7 +394,18 @@ def analyze_menu_with_claude(image_base64: str, media_type: str = "image/jpeg") 
         timeout=CLAUDE_TIMEOUT
     )
     
-    prompt = """Analyze this wine menu image and extract all wines listed with their prices.
+    # Build the prompt with optional user context
+    context_section = ""
+    if user_context:
+        context_section = f"""
+ADDITIONAL CONTEXT FROM USER:
+{user_context}
+
+Use this context to help identify wines more accurately. For example, if the user says it's a Sicilian wine list, prioritize Sicilian producers and appellations.
+
+"""
+    
+    prompt = context_section + """Analyze this wine menu image and extract all wines listed with their prices.
 
 CRITICAL RULES:
 1. PRODUCER NAME ALWAYS COMES FIRST - this is essential for wine database matching
@@ -591,453 +607,71 @@ def cached_post(endpoint: str, payload: dict, cache_empty_results: bool = True) 
         return None
 
 
-def generate_alternative_queries(original_query: str) -> List[str]:
+def get_retail_price(query: str) -> dict:
     """
-    Generate alternative query formats for a wine that didn't match.
+    Get retail price by searching /price_stats with wine name query.
+    Uses winelabs_price from the response.
     
-    Takes a query like "Ayunta Etna Bianco 'Piante Sparse' 2022"
-    and generates alternatives like:
-    - "Ayunta Piante Sparse Etna Bianco 2022" (cuvée moved before appellation)
-    - "Ayunta Piante Sparse 2022" (simplified, no appellation)
-    - "Ayunta Etna Bianco Piante Sparse 2022" (no quotes)
-    """
-    alternatives = []
-    
-    # Extract vintage (4 digits at the end)
-    vintage_match = re.search(r'\s*(\d{4})\s*$', original_query)
-    vintage = vintage_match.group(1) if vintage_match else ""
-    query_no_vintage = re.sub(r'\s*\d{4}\s*$', '', original_query).strip()
-    
-    # Extract content in quotes (cuvée name)
-    quote_match = re.search(r"['\"]([^'\"]+)['\"]", query_no_vintage)
-    
-    if quote_match:
-        cuvee = quote_match.group(1)
-        # Remove the quoted part from the query
-        query_no_cuvee = re.sub(r"['\"][^'\"]+['\"]", '', query_no_vintage).strip()
-        # Clean up extra spaces
-        query_no_cuvee = ' '.join(query_no_cuvee.split())
-        
-        # Alternative 1: Cuvée moved to after producer (assume first word is producer)
-        parts = query_no_cuvee.split()
-        if len(parts) >= 2:
-            producer = parts[0]
-            appellation = ' '.join(parts[1:])
-            # Format: Producer Cuvée Appellation Vintage
-            alt1 = f"{producer} {cuvee} {appellation}"
-            if vintage:
-                alt1 += f" {vintage}"
-            alternatives.append(alt1)
-        
-        # Alternative 2: Simplified - just producer and cuvée
-        if len(parts) >= 1:
-            producer = parts[0]
-            alt2 = f"{producer} {cuvee}"
-            if vintage:
-                alt2 += f" {vintage}"
-            alternatives.append(alt2)
-        
-        # Alternative 3: No quotes version
-        alt3 = query_no_cuvee.replace("  ", " ") + " " + cuvee
-        if vintage:
-            alt3 += f" {vintage}"
-        alternatives.append(alt3.strip())
-    else:
-        # No quotes found - try simplifying
-        parts = query_no_vintage.split()
-        if len(parts) >= 3:
-            # Try just first two words + vintage
-            alt = ' '.join(parts[:2])
-            if vintage:
-                alt += f" {vintage}"
-            alternatives.append(alt)
-    
-    # Remove duplicates and the original query
-    seen = set()
-    unique_alternatives = []
-    for alt in alternatives:
-        alt_clean = alt.strip()
-        if alt_clean and alt_clean not in seen and alt_clean != original_query:
-            seen.add(alt_clean)
-            unique_alternatives.append(alt_clean)
-    
-    return unique_alternatives
-
-
-def match_single_wine(query: str) -> Optional[Dict]:
-    """
-    Match a single wine query to LWIN using /match_to_lwin endpoint.
-    Returns {display_name, lwin} or None if no match.
-    """
-    payload = {
-        "user_id": WINE_LABS_USER_ID,
-        "query": query
-    }
-    
-    data = cached_post("/match_to_lwin", payload)
-    
-    if data is None:
-        return None
-    
-    # /match_to_lwin returns the result directly, not in a "results" array
-    lwin = data.get("lwin")
-    display_name = data.get("display_name", query)
-    
-    if lwin:
-        return {
-            "display_name": display_name,
-            "lwin": str(lwin)
-        }
-    
-    return None
-
-
-def match_wines_to_lwin(queries: List[str]) -> Dict[str, Dict]:
-    """
-    Match wine queries to LWIN codes using batch endpoint.
-    For unmatched wines, retry with alternative query formats using single endpoint.
-    Returns dict mapping query -> {display_name, lwin}
-    """
-    if not queries:
-        return {}
-    
-    # Step 1: Batch match all wines
-    payload = {
-        "user_id": WINE_LABS_USER_ID,
-        "queries": queries
-    }
-    
-    data = cached_post("/match_to_lwin_batch", payload)
-    
-    if data is None:
-        print("  [MATCH] API returned None")
-        return {q: {"display_name": q, "lwin": None} for q in queries}
-    
-    api_results = data.get("results", [])
-    
-    print(f"\n{'='*60}")
-    print("WINE LABS MATCHING RESULTS (Batch):")
-    print(f"{'='*60}")
-    
-    results = {}
-    unmatched_queries = []  # Track queries that need retry
-    
-    for i, query in enumerate(queries):
-        if i < len(api_results):
-            match_data = api_results[i]
-            
-            if match_data and isinstance(match_data, dict):
-                lwin = match_data.get("lwin")
-                display_name = match_data.get("display_name", query)
-                if lwin:
-                    results[query] = {
-                        "display_name": display_name,
-                        "lwin": str(lwin)
-                    }
-                    print(f"  ✓ '{query}'")
-                    print(f"    → LWIN: {lwin}")
-                    print(f"    → Display: {display_name}")
-                else:
-                    results[query] = {"display_name": query, "lwin": None}
-                    unmatched_queries.append(query)
-                    print(f"  ✗ '{query}' - No LWIN match (will retry)")
-            else:
-                results[query] = {"display_name": query, "lwin": None}
-                unmatched_queries.append(query)
-                print(f"  ✗ '{query}' - Invalid response (will retry)")
-        else:
-            results[query] = {"display_name": query, "lwin": None}
-            unmatched_queries.append(query)
-            print(f"  ✗ '{query}' - No result returned (will retry)")
-    
-    print(f"{'='*60}\n")
-    
-    # Step 2: Retry unmatched wines with alternative query formats
-    if unmatched_queries:
-        print(f"{'='*60}")
-        print(f"RETRYING {len(unmatched_queries)} UNMATCHED WINES:")
-        print(f"{'='*60}")
-        
-        for original_query in unmatched_queries:
-            alternatives = generate_alternative_queries(original_query)
-            
-            if not alternatives:
-                print(f"  ✗ '{original_query}' - No alternative queries to try")
-                continue
-            
-            print(f"  Trying alternatives for: '{original_query}'")
-            
-            matched = False
-            for alt_query in alternatives:
-                print(f"    → Trying: '{alt_query}'")
-                
-                match_result = match_single_wine(alt_query)
-                
-                if match_result and match_result.get("lwin"):
-                    results[original_query] = match_result
-                    print(f"    ✓ MATCHED! LWIN: {match_result['lwin']}")
-                    print(f"      Display: {match_result['display_name']}")
-                    matched = True
-                    break
-            
-            if not matched:
-                print(f"    ✗ No match found with any alternative")
-        
-        print(f"{'='*60}\n")
-    
-    return results
-
-
-def get_retail_price(lwin: str) -> dict:
-    """
-    Get retail price with dual-endpoint strategy:
-    1. Try /listings (US) first - most specific
-    2. Fallback to /price_stats (North America) if no US listings
-    
-    Returns dict with: price, count, source, listings
+    Returns dict with: price, count, source
     """
     result = {
         "price": None,
         "count": 0,
-        "source": None,  # "us_listings" or "na_stats"
-        "listings": []   # Individual listing details for expandable UI
+        "source": None
     }
     
-    if not lwin:
-        return result
-    
-    # Step 1: Try US listings first
-    listings_payload = {
-        "user_id": WINE_LABS_USER_ID,
-        "lwin": lwin,
-        "currency": "USD",
-        "countries": ["US"],
-        "limit": 100,
-        "offset": 0
-    }
-    
-    # Don't cache empty results - price data may become available later
-    listings_data = cached_post("/listings", listings_payload, cache_empty_results=False)
-    
-    if listings_data:
-        listings_results = listings_data.get("results", [])
-        
-        if listings_results:
-            # Extract prices and listing details
-            prices = []
-            listings_info = []
-            
-            for listing in listings_results:
-                price = listing.get("offer_price")
-                if price is None:
-                    price = listing.get("offer_adjusted_price")
-                
-                if price is not None:
-                    try:
-                        price_float = float(price)
-                        prices.append(price_float)
-                        
-                        # Store listing details for UI
-                        listings_info.append({
-                            "retailer": listing.get("shop_name", "Unknown"),
-                            "price": price_float,
-                            "state": listing.get("shop_state", ""),
-                            "url": listing.get("offer_url", ""),
-                            "last_check": listing.get("last_check_at", "")
-                        })
-                    except (ValueError, TypeError):
-                        pass
-            
-            if prices:
-                result["price"] = sum(prices) / len(prices)
-                result["count"] = len(prices)
-                result["source"] = "us_listings"
-                result["listings"] = listings_info
-                return result
-    
-    # Step 2: Fallback to North America price stats
-    stats_payload = {
-        "user_id": WINE_LABS_USER_ID,
-        "lwin": lwin,
-        "region": "north america",
-        "currency": "USD"
-    }
-    
-    # Don't cache empty results - price data may become available later
-    stats_data = cached_post("/price_stats", stats_payload, cache_empty_results=False)
-    
-    if stats_data:
-        stats_results = stats_data.get("results", [])
-        
-        if stats_results:
-            stats = stats_results[0]
-            winelabs_price = stats.get("winelabs_price")
-            
-            if winelabs_price is not None:
-                result["price"] = float(winelabs_price)
-                result["count"] = stats.get("count", 0)
-                result["source"] = "na_stats"
-                # No individual listings for stats endpoint
-                return result
-    
-    # Step 3: Final fallback to GLOBAL price stats (no region filter)
-    # Many wines (especially European) may not have US/NA pricing but have global prices
-    global_stats_payload = {
-        "user_id": WINE_LABS_USER_ID,
-        "lwin": lwin,
-        "currency": "USD"
-    }
-    
-    print(f"  [DEBUG] Global price_stats for LWIN: {lwin}")
-    global_stats_data = cached_post("/price_stats", global_stats_payload, cache_empty_results=False)
-    
-    if global_stats_data:
-        global_results = global_stats_data.get("results", [])
-        print(f"  [DEBUG] Global results count: {len(global_results)}")
-        
-        if global_results:
-            stats = global_results[0]
-            winelabs_price = stats.get("winelabs_price")
-            print(f"  [DEBUG] winelabs_price: {winelabs_price}")
-            
-            if winelabs_price is not None:
-                result["price"] = float(winelabs_price)
-                result["count"] = stats.get("count", 0)
-                result["source"] = "global_stats"  # Indicate this is global pricing
-                return result
-    else:
-        print(f"  [DEBUG] Global price_stats returned None")
-    
-    # Step 4: Try with base LWIN (first 7 digits) - some endpoints need this format
-    # LWIN format: XXXXXXX + YYYY + FF + SSSSS (base + vintage + format + size)
-    if len(lwin) > 7:
-        base_lwin = lwin[:7]
-        print(f"  [DEBUG] Trying base LWIN: {base_lwin}")
-        
-        base_stats_payload = {
-            "user_id": WINE_LABS_USER_ID,
-            "lwin": base_lwin,
-            "currency": "USD"
-        }
-        
-        base_stats_data = cached_post("/price_stats", base_stats_payload, cache_empty_results=False)
-        
-        if base_stats_data:
-            base_results = base_stats_data.get("results", [])
-            print(f"  [DEBUG] Base LWIN results count: {len(base_results)}")
-            
-            if base_results:
-                stats = base_results[0]
-                winelabs_price = stats.get("winelabs_price")
-                print(f"  [DEBUG] Base LWIN winelabs_price: {winelabs_price}")
-                
-                if winelabs_price is not None:
-                    result["price"] = float(winelabs_price)
-                    result["count"] = stats.get("count", 0)
-                    result["source"] = "global_stats"
-                    return result
-    
-    return result
-
-
-def get_critic_scores(lwin: str) -> dict:
-    """
-    Get critic scores for a wine using /critic_scores endpoint.
-    
-    Returns dict with: avg_score, score_count, scores (individual critic scores)
-    """
-    result = {
-        "avg_score": None,
-        "score_count": 0,
-        "scores": []  # Individual critic scores for potential expandable UI
-    }
-    
-    if not lwin:
+    if not query:
         return result
     
     payload = {
         "user_id": WINE_LABS_USER_ID,
-        "query": lwin  # Use LWIN as the query
+        "query": query,
+        "currency": "USD"
     }
     
-    data = cached_post("/critic_scores", payload)
+    print(f"  [PRICE] Searching for: {query}")
     
-    if data is None:
-        return result
+    # Don't cache empty results - price data may become available later
+    data = cached_post("/price_stats", payload, cache_empty_results=False)
     
-    scores_results = data.get("results", [])
-    
-    if not scores_results:
-        return result
-    
-    # Extract scores and calculate average
-    valid_scores = []
-    scores_info = []
-    
-    for score_entry in scores_results:
-        score = score_entry.get("review_score")
-        out_of = score_entry.get("out_of", 100)
+    if data:
+        results_list = data.get("results", [])
+        print(f"  [PRICE] Results count: {len(results_list)}")
         
-        if score is not None:
-            try:
-                score_float = float(score)
-                out_of_float = float(out_of) if out_of else 100
-                
-                # Normalize to 100-point scale if needed
-                if out_of_float != 100 and out_of_float > 0:
-                    normalized_score = (score_float / out_of_float) * 100
-                else:
-                    normalized_score = score_float
-                
-                valid_scores.append(normalized_score)
-                
-                # Store score details
-                scores_info.append({
-                    "critic": score_entry.get("critic_title", "Unknown"),
-                    "score": score_float,
-                    "out_of": out_of_float,
-                    "normalized_score": normalized_score,
-                    "review_date": score_entry.get("tasting_date", ""),
-                    "url": score_entry.get("url", "")
-                })
-            except (ValueError, TypeError):
-                pass
-    
-    if valid_scores:
-        result["avg_score"] = sum(valid_scores) / len(valid_scores)
-        result["score_count"] = len(valid_scores)
-        result["scores"] = scores_info
+        if results_list:
+            stats = results_list[0]
+            winelabs_price = stats.get("winelabs_price")
+            print(f"  [PRICE] winelabs_price: {winelabs_price}")
+            
+            if winelabs_price is not None:
+                result["price"] = float(winelabs_price)
+                result["count"] = stats.get("count", 0)
+                result["source"] = "price_stats"
+                return result
+    else:
+        print(f"  [PRICE] API returned None")
     
     return result
 
 
 def process_wines(wines: List[Dict]) -> List[Dict]:
     """
-    Process extracted wines: lookup retail prices, scores, and calculate markups.
+    Process extracted wines: lookup retail prices and calculate markups.
     Handles by-the-glass wines with bottle price estimation.
     """
-    # Build queries for LWIN matching
-    queries = []
+    results = []
+    
     for wine in wines:
+        # Build query from wine name
         name = wine.get("name", "")
         vintage = wine.get("vintage")
         if vintage:
             query = f"{name} {vintage}"
         else:
             query = name
-        queries.append(query)
-    
-    # Match all wines to LWIN codes
-    wine_matches = match_wines_to_lwin(queries)
-    
-    # Process each wine
-    results = []
-    for i, wine in enumerate(wines):
-        query = queries[i]
-        match_info = wine_matches.get(query, {"display_name": query, "lwin": None})
         
-        display_name = match_info["display_name"]
-        lwin = match_info["lwin"]
+        # Use Claude's extracted name as display name
+        display_name = name
         
         # Get menu price (original price from menu)
         original_menu_price = wine.get("price")
@@ -1047,12 +681,11 @@ def process_wines(wines: List[Dict]) -> List[Dict]:
             except (ValueError, TypeError):
                 original_menu_price = None
         
-        # Get retail price (US listings first, then NA stats fallback)
-        price_data = get_retail_price(lwin)
+        # Get retail price by searching with wine name
+        price_data = get_retail_price(query)
         retail_price = price_data["price"]
         listings_count = price_data["count"]
         price_source = price_data["source"]
-        listings_details = price_data["listings"]
         
         # Detect if wine is by the glass
         is_glass = wine.get("is_glass", False)
@@ -1084,12 +717,6 @@ def process_wines(wines: List[Dict]) -> List[Dict]:
             menu_price = original_menu_price
             glass_price = None
         
-        # Get critic scores
-        scores_data = get_critic_scores(lwin)
-        avg_score = scores_data["avg_score"]
-        score_count = scores_data["score_count"]
-        critic_scores = scores_data["scores"]
-        
         # Calculate markup (using estimated bottle price for glass pours)
         if menu_price is not None and retail_price is not None:
             markup_dollars = menu_price - retail_price
@@ -1097,12 +724,6 @@ def process_wines(wines: List[Dict]) -> List[Dict]:
         else:
             markup_dollars = None
             markup_percent = None
-        
-        # Calculate score per dollar (score / menu price - using bottle price for glass pours)
-        if avg_score is not None and menu_price is not None and menu_price > 0:
-            score_per_dollar = avg_score / menu_price
-        else:
-            score_per_dollar = None
         
         results.append({
             "original_name": wine.get("name", "Unknown"),
@@ -1116,14 +737,9 @@ def process_wines(wines: List[Dict]) -> List[Dict]:
             "retail_price": retail_price,
             "listings_count": listings_count,
             "price_source": price_source,
-            "listings": listings_details,
-            "avg_score": avg_score,
-            "score_count": score_count,
-            "critic_scores": critic_scores,
-            "score_per_dollar": score_per_dollar,
             "markup_dollars": markup_dollars,
             "markup_percent": markup_percent,
-            "matched": lwin is not None
+            "matched": retail_price is not None
         })
     
     return results
@@ -1148,6 +764,7 @@ def analyze():
     Expects JSON with:
     - image: base64-encoded image data
     - media_type: MIME type (e.g., "image/jpeg", "image/png")
+    - context: (optional) user-provided context about the menu
     
     Returns JSON with analyzed wine data and markups.
     """
@@ -1159,6 +776,7 @@ def analyze():
         
         image_base64 = data.get("image")
         media_type = data.get("media_type", "image/jpeg")
+        user_context = data.get("context", "")
         
         if not image_base64:
             return jsonify({"error": "No image provided"}), 400
@@ -1168,8 +786,11 @@ def analyze():
             image_base64 = image_base64.split(",")[1]
         
         # Step 1: Analyze menu with Claude Vision
-        print("Analyzing menu with Claude Vision...")
-        wines = analyze_menu_with_claude(image_base64, media_type)
+        if user_context:
+            print(f"Analyzing menu with Claude Vision (with context: '{user_context[:50]}...')...")
+        else:
+            print("Analyzing menu with Claude Vision...")
+        wines = analyze_menu_with_claude(image_base64, media_type, user_context)
         
         if not wines:
             return jsonify({
@@ -1678,9 +1299,8 @@ SHARE_PAGE_HTML = '''
         const tbody = document.getElementById('results-body');
         wines.forEach(wine => {
             const row = document.createElement('tr');
-            const displayName = wine.matched ? wine.display_name : wine.original_name;
             row.innerHTML = `
-                <td class="wine-name">${displayName}</td>
+                <td class="wine-name">${wine.display_name || wine.original_name}</td>
                 <td class="hide-mobile">${wine.vintage || '—'}</td>
                 <td class="price price-menu">${formatPrice(wine.menu_price)}</td>
                 <td class="price price-retail">${formatPrice(wine.retail_price)}</td>

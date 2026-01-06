@@ -229,6 +229,62 @@
             gap: 12px;
         }
 
+        /* Context Input */
+        .context-input-section {
+            width: 100%;
+            margin-bottom: 16px;
+        }
+
+        .context-label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+
+        .context-label svg {
+            opacity: 0.7;
+        }
+
+        .optional-tag {
+            color: var(--text-muted);
+            font-weight: 400;
+        }
+
+        .context-textarea {
+            width: 100%;
+            padding: 12px 14px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border-subtle);
+            border-radius: 10px;
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 0.9rem;
+            resize: vertical;
+            min-height: 60px;
+            max-height: 150px;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .context-textarea:focus {
+            outline: none;
+            border-color: var(--accent-gold);
+            box-shadow: 0 0 0 3px rgba(201, 162, 39, 0.1);
+        }
+
+        .context-textarea::placeholder {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+
+        .context-hint {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-top: 6px;
+        }
+
         /* Loading State */
         .loading-overlay {
             display: none;
@@ -517,33 +573,6 @@
             font-size: 0.9rem;
         }
 
-        .source-badge {
-            display: inline-block;
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-size: 0.7rem;
-            font-weight: 500;
-            text-transform: uppercase;
-            letter-spacing: 0.03em;
-            margin-left: 8px;
-            vertical-align: middle;
-        }
-
-        .source-badge.us-listings {
-            background: rgba(52, 199, 89, 0.15);
-            color: var(--accent-green);
-        }
-
-        .source-badge.na-stats {
-            background: rgba(255, 255, 255, 0.08);
-            color: var(--text-muted);
-        }
-
-        .source-badge.global-stats {
-            background: rgba(138, 180, 248, 0.15);
-            color: #8ab4f8;
-        }
-
         /* Glass Pour Styling */
         .glass-price-display {
             display: flex;
@@ -585,34 +614,6 @@
 
         .price-menu.is-glass {
             background: rgba(175, 82, 222, 0.05);
-        }
-
-        /* Score Styling */
-        .score-value {
-            color: var(--text-primary);
-            font-weight: 500;
-        }
-
-        .score-count {
-            color: var(--text-muted);
-            font-size: 0.8rem;
-        }
-
-        .score-per-dollar {
-            font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
-            font-weight: 500;
-        }
-
-        .spd-high {
-            color: var(--accent-green);
-        }
-
-        .spd-medium {
-            color: #ff9f0a;
-        }
-
-        .spd-low {
-            color: var(--text-secondary);
         }
 
         /* Expandable Rows */
@@ -1055,10 +1056,6 @@
                 font-size: 0.85rem;
             }
 
-            .source-badge {
-                display: none;
-            }
-
             .markup-dollars {
                 display: none;
             }
@@ -1255,6 +1252,26 @@
                     <div class="preview-filename" id="preview-filename">menu.jpg</div>
                     <div class="preview-size" id="preview-size">2.4 MB</div>
                 </div>
+                
+                <!-- Context Input -->
+                <div class="context-input-section">
+                    <label for="context-input" class="context-label">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                            <circle cx="12" cy="12" r="10"/>
+                            <line x1="12" y1="16" x2="12" y2="12"/>
+                            <line x1="12" y1="8" x2="12.01" y2="8"/>
+                        </svg>
+                        Additional Context <span class="optional-tag">(optional)</span>
+                    </label>
+                    <textarea 
+                        id="context-input" 
+                        class="context-textarea" 
+                        placeholder="Add any helpful info about this menu... e.g., 'This is a Sicilian wine list', 'The wines are from 2020-2022 vintages', 'Restaurant is in Italy'"
+                        rows="2"
+                    ></textarea>
+                    <div class="context-hint">This helps identify wines more accurately</div>
+                </div>
+                
                 <div class="preview-actions">
                     <button class="btn btn-primary" id="analyze-btn">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1310,14 +1327,6 @@
                                 <th class="sortable active asc" data-sort="markup_percent">
                                     Markup
                                     <span class="sort-icon">▲</span>
-                                </th>
-                                <th class="sortable hide-mobile" data-sort="avg_score">
-                                    Score
-                                    <span class="sort-icon"></span>
-                                </th>
-                                <th class="sortable" data-sort="score_per_dollar">
-                                    Sc/$
-                                    <span class="sort-icon"></span>
                                 </th>
                             </tr>
                         </thead>
@@ -1457,30 +1466,8 @@
         }
 
         function formatSourceBadge(source) {
-            if (!source) return '';
-            if (source === 'us_listings') {
-                return '<span class="source-badge us-listings">US</span>';
-            } else if (source === 'na_stats') {
-                return '<span class="source-badge na-stats">NORAM</span>';
-            } else if (source === 'global_stats') {
-                return '<span class="source-badge global-stats">GLOBAL</span>';
-            }
+            // Source badge no longer needed - single source (price_stats)
             return '';
-        }
-
-        function formatScore(score, count) {
-            if (score === null || score === undefined) return '<span class="na">N/A</span>';
-            const countBadge = count > 0 ? ` <span class="score-count">(${count})</span>` : '';
-            return `<span class="score-value">${score.toFixed(1)}</span>${countBadge}`;
-        }
-
-        function formatScorePerDollar(spd) {
-            if (spd === null || spd === undefined) return '<span class="na">N/A</span>';
-            // Higher is better - color code it
-            let colorClass = 'spd-low';
-            if (spd >= 0.5) colorClass = 'spd-high';
-            else if (spd >= 0.3) colorClass = 'spd-medium';
-            return `<span class="score-per-dollar ${colorClass}">${spd.toFixed(2)}</span>`;
         }
 
         // Sorting Functions
@@ -1856,6 +1843,10 @@
                 
                 let response;
                 try {
+                    // Get user context if provided
+                    const contextInput = document.getElementById('context-input');
+                    const userContext = contextInput ? contextInput.value.trim() : '';
+                    
                     response = await fetch('/analyze', {
                         method: 'POST',
                         headers: {
@@ -1863,7 +1854,8 @@
                         },
                         body: JSON.stringify({
                             image: currentBase64,
-                            media_type: mediaType
+                            media_type: mediaType,
+                            context: userContext
                         }),
                         signal: controller.signal
                     });
@@ -1974,8 +1966,6 @@
                     <td class="price price-menu${glassClass}">${formatMenuPrice(wine)}</td>
                     <td class="price price-retail">${formatPrice(wine.retail_price)}${formatSourceBadge(wine.price_source)}</td>
                     <td>${formatMarkupCombined(wine.markup_percent, wine.markup_dollars)}</td>
-                    <td class="hide-mobile">${formatScore(wine.avg_score, wine.score_count)}</td>
-                    <td>${formatScorePerDollar(wine.score_per_dollar)}</td>
                 `;
                 
                 resultsBody.appendChild(row);
@@ -1987,7 +1977,7 @@
                     detailRow.dataset.index = index;
                     
                     let listingsHtml = `
-                        <td colspan="7">
+                        <td colspan="5">
                             <div class="listings-detail-content">
                                 <table class="listings-detail-table">
                                     <thead>
