@@ -522,6 +522,11 @@
             font-size: 1.05rem;
         }
 
+        /* Hide mobile vintage on desktop - shown in separate column */
+        .mobile-vintage {
+            display: none;
+        }
+
         .wine-unmatched {
             opacity: 0.6;
         }
@@ -1114,42 +1119,113 @@
             .results-card {
                 border-radius: 12px;
                 padding: 0;
+                background: transparent;
+                border: none;
+            }
+
+            /* Hide table header on mobile */
+            .results-table thead {
+                display: none;
             }
 
             .results-table {
-                font-size: 0.8rem;
+                display: block;
             }
 
-            .results-table th {
-                padding: 12px 6px;
-                font-size: 0.65rem;
+            .results-table tbody {
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
             }
 
-            .results-table td {
-                padding: 14px 6px;
+            /* Transform each row into a card */
+            .results-table tbody tr.wine-row {
+                display: block;
+                background: var(--bg-card);
+                border: 1px solid var(--border-subtle);
+                border-radius: 12px;
+                padding: 16px;
+                margin: 0;
             }
 
+            .results-table tbody tr.wine-row:hover {
+                background: var(--bg-card);
+            }
+
+            /* Hide vintage column (shown inline with name) */
             .hide-mobile {
                 display: none !important;
             }
 
-            .wine-name {
-                font-size: 0.9rem;
-                max-width: 120px;
-                overflow: hidden;
-                text-overflow: ellipsis;
-                white-space: nowrap;
+            /* Wine name - full width at top of card */
+            .results-table td.wine-name {
+                display: block;
+                width: 100%;
+                font-size: 1rem;
+                font-weight: 600;
+                color: var(--text-primary);
+                padding: 0 0 12px 0;
+                border-bottom: 1px solid var(--border-subtle);
+                margin-bottom: 12px;
+                max-width: none;
+                overflow: visible;
+                text-overflow: unset;
+                white-space: normal;
+                line-height: 1.4;
             }
 
-            .price {
+            /* Vintage shown inline with name on mobile */
+            .mobile-vintage {
+                display: block;
                 font-size: 0.85rem;
+                font-weight: 400;
+                color: var(--text-secondary);
+                margin-top: 4px;
             }
 
-            .markup-dollars {
+            /* Price cells in a row */
+            .results-table td.price,
+            .results-table td.markup-cell {
+                display: inline-flex;
+                flex-direction: column;
+                width: calc(33.33% - 8px);
+                padding: 0;
+                border: none;
+                vertical-align: top;
+            }
+
+            /* Labels for mobile cards */
+            .results-table td[data-label]::before {
+                content: attr(data-label);
+                display: block;
+                font-size: 0.7rem;
+                font-weight: 500;
+                color: var(--text-muted);
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+                margin-bottom: 4px;
+            }
+
+            /* Don't show label for wine name */
+            .results-table td.wine-name::before {
                 display: none;
             }
 
+            .price {
+                font-size: 0.95rem;
+            }
+
+            .markup-dollars {
+                display: inline;
+                font-size: 0.8rem;
+            }
+
             .expand-icon {
+                display: none !important;
+            }
+
+            /* Hide detail rows on mobile */
+            .results-table tbody tr.listings-detail-row {
                 display: none !important;
             }
 
@@ -1191,17 +1267,35 @@
                 font-size: 1.5rem;
             }
 
-            .results-table th,
-            .results-table td {
-                padding: 10px 4px;
+            .results-table tbody tr.wine-row {
+                padding: 14px;
             }
 
-            .wine-name {
-                max-width: 90px;
+            .results-table td.wine-name {
+                font-size: 0.95rem;
+                padding-bottom: 10px;
+                margin-bottom: 10px;
+            }
+
+            .mobile-vintage {
+                font-size: 0.8rem;
+            }
+
+            .results-table td.price,
+            .results-table td.markup-cell {
+                width: calc(33.33% - 6px);
+            }
+
+            .results-table td[data-label]::before {
+                font-size: 0.65rem;
             }
 
             .price {
-                font-size: 0.8rem;
+                font-size: 0.85rem;
+            }
+
+            .markup-dollars {
+                font-size: 0.75rem;
             }
             
             /* Compact glass display on mobile */
@@ -1897,13 +1991,8 @@
             shareBtn.disabled = true;
             
             try {
-                // Get media type from base64 data URL
-                const mediaType = currentBase64.split(';')[0].split(':')[1] || 'image/jpeg';
-                
-                // Remove data URL prefix for sending
-                const imageData = currentBase64.includes(',') 
-                    ? currentBase64.split(',')[1] 
-                    : currentBase64;
+                // Safely extract media type and image data
+                const { mediaType, imageData } = parseDataUrl(currentBase64);
                 
                 const response = await fetch('/save', {
                     method: 'POST',
@@ -1986,6 +2075,38 @@
             }
         });
 
+        // Helper function to safely extract media type and image data from base64 data URL
+        function parseDataUrl(dataUrl) {
+            // Default values
+            let mediaType = 'image/jpeg';
+            let imageData = dataUrl;
+            
+            if (!dataUrl || typeof dataUrl !== 'string') {
+                return { mediaType, imageData: '' };
+            }
+            
+            // Check if it's a data URL format: data:image/type;base64,DATA
+            if (dataUrl.startsWith('data:')) {
+                try {
+                    // Extract media type
+                    const match = dataUrl.match(/^data:([^;,]+)/);
+                    if (match && match[1]) {
+                        mediaType = match[1];
+                    }
+                    
+                    // Extract base64 data (after the comma)
+                    const commaIndex = dataUrl.indexOf(',');
+                    if (commaIndex !== -1) {
+                        imageData = dataUrl.substring(commaIndex + 1);
+                    }
+                } catch (e) {
+                    console.warn('Error parsing data URL, using defaults:', e);
+                }
+            }
+            
+            return { mediaType, imageData };
+        }
+
         // Analysis
         analyzeBtn.addEventListener('click', async () => {
             if (!currentBase64) {
@@ -2000,8 +2121,8 @@
             showLoading(1, 'Scanning menu...', 'AI is reading your wine list');
 
             try {
-                // Get media type from base64 data URL
-                const mediaType = currentBase64.split(';')[0].split(':')[1] || 'image/jpeg';
+                // Safely extract media type and image data
+                const { mediaType, imageData } = parseDataUrl(currentBase64);
                 
                 // Create AbortController for timeout
                 const controller = new AbortController();
@@ -2125,13 +2246,14 @@
                 const expandIcon = hasListings ? '<span class="expand-icon">▶</span>' : '<span class="expand-icon" style="visibility:hidden">▶</span>';
                 
                 const glassClass = wine.is_glass ? ' is-glass' : '';
+                const vintageDisplay = wine.vintage || '';
                 
                 row.innerHTML = `
-                    <td class="${nameClass}">${expandIcon}${displayName}</td>
+                    <td class="${nameClass}" data-label="Wine">${expandIcon}${displayName}${vintageDisplay ? `<span class="mobile-vintage">${vintageDisplay}</span>` : ''}</td>
                     <td class="wine-vintage hide-mobile">${wine.vintage || '<span class="na">—</span>'}</td>
-                    <td class="price price-menu${glassClass}">${formatMenuPrice(wine)}</td>
-                    <td class="price price-retail">${formatPrice(wine.retail_price)}${formatSourceBadge(wine.price_source)}</td>
-                    <td>${formatMarkupCombined(wine.markup_percent, wine.markup_dollars)}</td>
+                    <td class="price price-menu${glassClass}" data-label="Menu">${formatMenuPrice(wine)}</td>
+                    <td class="price price-retail" data-label="Retail">${formatPrice(wine.retail_price)}${formatSourceBadge(wine.price_source)}</td>
+                    <td class="markup-cell" data-label="Markup">${formatMarkupCombined(wine.markup_percent, wine.markup_dollars)}</td>
                 `;
                 
                 resultsBody.appendChild(row);

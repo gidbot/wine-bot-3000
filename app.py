@@ -1202,12 +1202,70 @@ SHARE_PAGE_HTML = '''
             opacity: 1;
         }
         
+        /* Hide mobile vintage on desktop */
+        .mobile-vintage { display: none; }
+        
         @media (max-width: 768px) {
-            .results-table { font-size: 0.85rem; }
-            .results-table th, .results-table td { padding: 10px 8px; }
-            .hide-mobile { display: none; }
+            .hide-mobile { display: none !important; }
             .image-container.expanded { max-height: 400px; }
             .menu-image { max-height: 350px; }
+            
+            /* Card layout for mobile */
+            .results-card {
+                background: transparent;
+                border: none;
+            }
+            .results-table thead { display: none; }
+            .results-table { display: block; }
+            .results-table tbody {
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+            }
+            .results-table tbody tr {
+                display: block;
+                background: var(--bg-card);
+                border: 1px solid var(--border-subtle);
+                border-radius: 12px;
+                padding: 16px;
+            }
+            .results-table td.wine-name {
+                display: block;
+                width: 100%;
+                font-size: 1rem;
+                font-weight: 600;
+                padding: 0 0 12px 0;
+                border-bottom: 1px solid var(--border-subtle);
+                margin-bottom: 12px;
+                white-space: normal;
+                line-height: 1.4;
+            }
+            .mobile-vintage {
+                display: block;
+                font-size: 0.85rem;
+                font-weight: 400;
+                color: var(--text-secondary);
+                margin-top: 4px;
+            }
+            .results-table td.price,
+            .results-table td.markup-cell {
+                display: inline-flex;
+                flex-direction: column;
+                width: calc(33.33% - 8px);
+                padding: 0;
+                border: none;
+            }
+            .results-table td[data-label]::before {
+                content: attr(data-label);
+                display: block;
+                font-size: 0.7rem;
+                font-weight: 500;
+                color: var(--text-muted);
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+                margin-bottom: 4px;
+            }
+            .results-table td.wine-name::before { display: none; }
         }
     </style>
 </head>
@@ -1343,12 +1401,14 @@ SHARE_PAGE_HTML = '''
         const tbody = document.getElementById('results-body');
         sortedWines.forEach(wine => {
             const row = document.createElement('tr');
+            const displayName = wine.display_name || wine.original_name;
+            const vintageDisplay = wine.vintage || '';
             row.innerHTML = `
-                <td class="wine-name">${wine.display_name || wine.original_name}</td>
+                <td class="wine-name" data-label="Wine">${displayName}${vintageDisplay ? `<span class="mobile-vintage">${vintageDisplay}</span>` : ''}</td>
                 <td class="hide-mobile">${wine.vintage || '—'}</td>
-                <td class="price price-menu">${formatPrice(wine.menu_price)}</td>
-                <td class="price price-retail">${formatPrice(wine.retail_price)}</td>
-                <td>${formatMarkup(wine.markup_percent)}</td>
+                <td class="price price-menu" data-label="Menu">${formatPrice(wine.menu_price)}</td>
+                <td class="price price-retail" data-label="Retail">${formatPrice(wine.retail_price)}</td>
+                <td class="markup-cell" data-label="Markup">${formatMarkup(wine.markup_percent)}</td>
             `;
             tbody.appendChild(row);
         });
