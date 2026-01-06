@@ -1255,6 +1255,49 @@
                 font-size: 0.75rem;
                 min-width: 400px;
             }
+
+            /* Modal mobile optimization */
+            .modal-overlay {
+                padding: 16px;
+                align-items: flex-end;
+            }
+
+            .modal-content {
+                max-width: 100%;
+                padding: 24px 20px;
+                border-radius: 16px 16px 0 0;
+                max-height: 90vh;
+                overflow-y: auto;
+            }
+
+            .modal-content h3 {
+                font-size: 1.3rem;
+            }
+
+            .modal-content p {
+                font-size: 0.9rem;
+            }
+
+            .modal-content input {
+                font-size: 16px; /* Prevents zoom on iOS */
+                padding: 16px;
+            }
+
+            .modal-buttons {
+                flex-direction: column;
+                gap: 10px;
+            }
+
+            .modal-buttons .btn {
+                width: 100%;
+                padding: 16px;
+                justify-content: center;
+            }
+
+            /* Reorder buttons - Share first on mobile */
+            .modal-buttons {
+                flex-direction: column-reverse;
+            }
         }
 
         /* Extra small screens */
@@ -1614,6 +1657,7 @@
 
         let currentFile = null;
         let currentBase64 = null;
+        let isImageReady = false;  // Track if FileReader has completed
         let winesData = [];
         let currentResults = null;  // Store full results for sharing
         let currentSort = { field: 'markup_percent', direction: 'asc' };
@@ -1849,6 +1893,11 @@
             }
 
             currentFile = file;
+            isImageReady = false;  // Reset ready state
+            
+            // Disable analyze button while loading
+            analyzeBtn.disabled = true;
+            analyzeBtn.textContent = 'Loading...';
             
             // Create preview
             const reader = new FileReader();
@@ -1861,6 +1910,18 @@
                 uploadSection.style.display = 'none';
                 previewSection.classList.add('active');
                 resultsSection.classList.remove('active');
+                
+                // Mark image as ready and enable analyze button
+                isImageReady = true;
+                analyzeBtn.disabled = false;
+                analyzeBtn.textContent = 'Analyze Menu';
+            };
+            reader.onerror = function(e) {
+                console.error('FileReader error:', e);
+                showError('Failed to load image. Please try again.');
+                isImageReady = false;
+                analyzeBtn.disabled = false;
+                analyzeBtn.textContent = 'Analyze Menu';
             };
             reader.readAsDataURL(file);
         }
@@ -1912,22 +1973,28 @@
         clearBtn.addEventListener('click', () => {
             currentFile = null;
             currentBase64 = null;
+            isImageReady = false;
             fileInput.value = '';
             cameraInput.value = '';
             previewSection.classList.remove('active');
             uploadSection.style.display = 'block';
             hideError();
+            analyzeBtn.disabled = false;
+            analyzeBtn.textContent = 'Analyze Menu';
         });
 
         newAnalysisBtn.addEventListener('click', () => {
             currentFile = null;
             currentBase64 = null;
+            isImageReady = false;
             currentResults = null;
             fileInput.value = '';
             cameraInput.value = '';
             previewSection.classList.remove('active');
             resultsSection.classList.remove('active');
             uploadSection.style.display = 'block';
+            analyzeBtn.disabled = false;
+            analyzeBtn.textContent = 'Analyze Menu';
             shareBtn.style.display = 'none';
             hideError();
         });
@@ -2014,14 +2081,19 @@
                 // Build shareable URL
                 const shareUrl = `${window.location.origin}/share/${data.id}`;
                 
-                // Copy to clipboard
-                await navigator.clipboard.writeText(shareUrl);
+                // Copy to clipboard with fallbacks
+                const copyResult = await copyToClipboard(shareUrl);
                 
-                // Show success toast
-                showShareToast();
+                if (copyResult.success) {
+                    // Show success toast
+                    showShareToast();
+                    shareBtnText.textContent = 'Link Copied!';
+                } else {
+                    // Fallback: show manual copy modal
+                    showManualCopyModal(shareUrl);
+                    shareBtnText.textContent = 'Link Ready!';
+                }
                 
-                // Update button
-                shareBtnText.textContent = 'Link Copied!';
                 setTimeout(() => {
                     shareBtnText.textContent = 'Share Results';
                     shareBtn.disabled = false;
@@ -2033,7 +2105,7 @@
                 setTimeout(() => {
                     shareBtnText.textContent = 'Share Results';
                     shareBtn.disabled = false;
-                }, 2000);
+                }, 3000);
             }
         });
         
@@ -2051,14 +2123,92 @@
             }, 3000);
         }
 
+        // Robust clipboard copy with fallbacks for mobile
+        async function copyToClipboard(text) {
+            // Method 1: Modern Clipboard API
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                try {
+                    await navigator.clipboard.writeText(text);
+                    return { success: true, method: 'clipboard' };
+                } catch (e) {
+                    console.log('Clipboard API failed, trying fallback:', e);
+                }
+            }
+            
+            // Method 2: execCommand fallback (works on more mobile browsers)
+            try {
+                const textArea = document.createElement('textarea');
+                textArea.value = text;
+                textArea.style.position = 'fixed';
+                textArea.style.left = '-9999px';
+                textArea.style.top = '0';
+                textArea.setAttribute('readonly', ''); // Prevent keyboard on mobile
+                document.body.appendChild(textArea);
+                
+                // iOS specific handling
+                const range = document.createRange();
+                range.selectNodeContents(textArea);
+                const selection = window.getSelection();
+                selection.removeAllRanges();
+                selection.addRange(range);
+                textArea.setSelectionRange(0, 999999); // For mobile devices
+                
+                const success = document.execCommand('copy');
+                document.body.removeChild(textArea);
+                
+                if (success) {
+                    return { success: true, method: 'execCommand' };
+                }
+            } catch (e) {
+                console.log('execCommand fallback failed:', e);
+            }
+            
+            // Method 3: Show URL for manual copy
+            return { success: false, url: text };
+        }
+
+        // Show URL modal for manual copying (fallback)
+        function showManualCopyModal(url) {
+            const existingModal = document.getElementById('manual-copy-modal');
+            if (existingModal) {
+                existingModal.remove();
+            }
+            
+            const modal = document.createElement('div');
+            modal.id = 'manual-copy-modal';
+            modal.className = 'modal-overlay visible';
+            modal.innerHTML = `
+                <div class="modal-content">
+                    <h3>Share Link Ready</h3>
+                    <p>Long-press to copy the link below:</p>
+                    <input type="text" value="${url}" readonly id="manual-copy-input" 
+                           style="font-size: 14px; word-break: break-all;">
+                    <div class="modal-buttons">
+                        <button class="btn btn-primary" onclick="this.closest('.modal-overlay').remove()">
+                            Done
+                        </button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+            
+            // Auto-select the text
+            const input = document.getElementById('manual-copy-input');
+            input.focus();
+            input.select();
+        }
+
         // Try Again button handler (no wines found)
         tryAgainBtn.addEventListener('click', () => {
             hideNoWinesFound();
             // Reset file input
             currentFile = null;
             currentBase64 = null;
+            isImageReady = false;
             previewSection.classList.remove('active');
             uploadSection.style.display = 'block';
+            analyzeBtn.disabled = false;
+            analyzeBtn.textContent = 'Analyze Menu';
             // Trigger file picker
             fileInput.click();
         });
@@ -2109,8 +2259,8 @@
 
         // Analysis
         analyzeBtn.addEventListener('click', async () => {
-            if (!currentBase64) {
-                showError('Please select an image first');
+            if (!currentBase64 || !isImageReady) {
+                showError('Please wait for the image to fully load');
                 return;
             }
             
