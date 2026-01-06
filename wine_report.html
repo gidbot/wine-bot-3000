@@ -964,6 +964,95 @@
             font-size: 1.2rem;
         }
 
+        /* Restaurant Name Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .modal-overlay.visible {
+            display: flex;
+        }
+
+        .modal-content {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-subtle);
+            border-radius: 16px;
+            padding: 32px;
+            max-width: 420px;
+            width: 100%;
+            animation: modalSlideIn 0.3s ease;
+        }
+
+        @keyframes modalSlideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .modal-content h3 {
+            font-family: 'Playfair Display', serif;
+            font-size: 1.5rem;
+            margin-bottom: 12px;
+            color: var(--text-primary);
+        }
+
+        .modal-content p {
+            color: var(--text-secondary);
+            margin-bottom: 20px;
+            font-size: 0.95rem;
+        }
+
+        .modal-content input {
+            width: 100%;
+            padding: 14px 16px;
+            border: 1px solid var(--border-subtle);
+            border-radius: 10px;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-size: 1rem;
+            margin-bottom: 24px;
+            transition: border-color 0.2s;
+        }
+
+        .modal-content input:focus {
+            outline: none;
+            border-color: var(--accent-gold);
+        }
+
+        .modal-content input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+        }
+
+        .modal-buttons .btn {
+            padding: 12px 24px;
+        }
+
+        .modal-buttons .btn svg {
+            width: 16px;
+            height: 16px;
+        }
+
         /* Footer */
         footer {
             text-align: center;
@@ -1363,6 +1452,28 @@
                 <span class="share-toast-icon">✓</span>
                 <span class="share-toast-text">Link copied to clipboard!</span>
             </div>
+            
+            <!-- Restaurant Name Modal -->
+            <div class="modal-overlay" id="restaurant-modal">
+                <div class="modal-content">
+                    <h3>Share Analysis</h3>
+                    <p>Enter the restaurant name to include with your shared link:</p>
+                    <input type="text" id="restaurant-name-input" placeholder="e.g., The French Laundry" maxlength="100">
+                    <div class="modal-buttons">
+                        <button class="btn btn-secondary modal-cancel" id="modal-cancel">Cancel</button>
+                        <button class="btn btn-primary modal-confirm" id="modal-confirm">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="18" cy="5" r="3"/>
+                                <circle cx="6" cy="12" r="3"/>
+                                <circle cx="18" cy="19" r="3"/>
+                                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+                                <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+                            </svg>
+                            Share
+                        </button>
+                    </div>
+                </div>
+            </div>
         </section>
 
         <footer>
@@ -1727,12 +1838,59 @@
             hideError();
         });
 
-        // Share button handler
-        shareBtn.addEventListener('click', async () => {
+        // Restaurant name modal elements
+        const restaurantModal = document.getElementById('restaurant-modal');
+        const restaurantNameInput = document.getElementById('restaurant-name-input');
+        const modalCancel = document.getElementById('modal-cancel');
+        const modalConfirm = document.getElementById('modal-confirm');
+
+        // Share button handler - show modal first
+        shareBtn.addEventListener('click', () => {
             if (!currentBase64 || !currentResults) {
                 showError('No analysis to share');
                 return;
             }
+            
+            // Show restaurant name modal
+            restaurantNameInput.value = '';
+            restaurantModal.classList.add('visible');
+            restaurantNameInput.focus();
+        });
+
+        // Modal cancel button
+        modalCancel.addEventListener('click', () => {
+            restaurantModal.classList.remove('visible');
+        });
+
+        // Close modal on overlay click
+        restaurantModal.addEventListener('click', (e) => {
+            if (e.target === restaurantModal) {
+                restaurantModal.classList.remove('visible');
+            }
+        });
+
+        // Close modal on Escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && restaurantModal.classList.contains('visible')) {
+                restaurantModal.classList.remove('visible');
+            }
+        });
+
+        // Modal confirm button - proceed with share
+        modalConfirm.addEventListener('click', async () => {
+            const restaurantName = restaurantNameInput.value.trim();
+            
+            if (!restaurantName) {
+                restaurantNameInput.style.borderColor = 'var(--accent-red)';
+                restaurantNameInput.focus();
+                setTimeout(() => {
+                    restaurantNameInput.style.borderColor = '';
+                }, 2000);
+                return;
+            }
+            
+            // Close modal
+            restaurantModal.classList.remove('visible');
             
             // Update button state
             shareBtnText.textContent = 'Saving...';
@@ -1753,7 +1911,8 @@
                     body: JSON.stringify({
                         image: imageData,
                         media_type: mediaType,
-                        results: currentResults
+                        results: currentResults,
+                        restaurant_name: restaurantName
                     })
                 });
                 
@@ -1786,6 +1945,13 @@
                     shareBtnText.textContent = 'Share Results';
                     shareBtn.disabled = false;
                 }, 2000);
+            }
+        });
+        
+        // Allow Enter key to confirm in modal
+        restaurantNameInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                modalConfirm.click();
             }
         });
         

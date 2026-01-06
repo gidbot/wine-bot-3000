@@ -209,11 +209,18 @@ class AnalysesStore:
                     results_json TEXT NOT NULL,
                     wine_count INTEGER DEFAULT 0,
                     matched_count INTEGER DEFAULT 0,
+                    restaurant_name TEXT DEFAULT '',
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     expires_at TIMESTAMP NOT NULL
                 )
             ''')
             conn.execute('CREATE INDEX IF NOT EXISTS idx_expires_at ON analyses(expires_at)')
+            
+            # Add restaurant_name column if it doesn't exist (migration for existing DBs)
+            try:
+                conn.execute("ALTER TABLE analyses ADD COLUMN restaurant_name TEXT DEFAULT ''")
+            except sqlite3.OperationalError:
+                pass  # Column already exists
     
     @contextmanager
     def _get_conn(self):
@@ -253,7 +260,7 @@ class AnalysesStore:
             
             return len(expired)
     
-    def save_analysis(self, image_base64: str, media_type: str, results: dict) -> str:
+    def save_analysis(self, image_base64: str, media_type: str, results: dict, restaurant_name: str = "") -> str:
         """
         Save an analysis with its image.
         
@@ -287,14 +294,15 @@ class AnalysesStore:
         # Save to database
         with self._get_conn() as conn:
             conn.execute('''
-                INSERT INTO analyses (id, image_filename, results_json, wine_count, matched_count, expires_at)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO analyses (id, image_filename, results_json, wine_count, matched_count, restaurant_name, expires_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
             ''', (
                 analysis_id,
                 image_filename,
                 json.dumps(results),
                 results.get("total_wines", 0),
                 results.get("matched_wines", 0),
+                restaurant_name,
                 expires_at.isoformat()
             ))
         
@@ -329,6 +337,7 @@ class AnalysesStore:
                 "results": json.loads(row["results_json"]),
                 "wine_count": row["wine_count"],
                 "matched_count": row["matched_count"],
+                "restaurant_name": row["restaurant_name"] or "",
                 "created_at": row["created_at"],
                 "expires_at": row["expires_at"]
             }
@@ -896,6 +905,7 @@ def save_analysis():
     - image: base64-encoded image data
     - media_type: MIME type
     - results: the analysis results object
+    - restaurant_name: name of the restaurant
     
     Returns JSON with shareable ID.
     """
@@ -908,6 +918,7 @@ def save_analysis():
         image_base64 = data.get("image")
         media_type = data.get("media_type", "image/jpeg")
         results = data.get("results")
+        restaurant_name = data.get("restaurant_name", "")
         
         if not image_base64:
             return jsonify({"error": "No image provided"}), 400
@@ -919,7 +930,7 @@ def save_analysis():
             image_base64 = image_base64.split(",")[1]
         
         # Save the analysis
-        analysis_id = analyses_store.save_analysis(image_base64, media_type, results)
+        analysis_id = analyses_store.save_analysis(image_base64, media_type, results, restaurant_name)
         
         return jsonify({
             "success": True,
@@ -951,6 +962,7 @@ def view_shared_analysis(analysis_id):
         analysis_data=json.dumps(analysis["results"]),
         wine_count=analysis["wine_count"],
         matched_count=analysis["matched_count"],
+        restaurant_name=analysis["restaurant_name"],
         created_at=analysis["created_at"],
         expires_at=analysis["expires_at"]
     )
@@ -1028,6 +1040,13 @@ SHARE_PAGE_HTML = '''
         h1 { font-family: 'Playfair Display', serif; font-size: 2rem; font-weight: 500; margin-bottom: 8px; }
         h1 span { color: var(--accent-gold); }
         .subtitle { color: var(--text-secondary); font-size: 0.95rem; }
+        .restaurant-name { 
+            font-family: 'Playfair Display', serif;
+            font-size: 1.6rem; 
+            font-weight: 500;
+            color: var(--accent-gold);
+            margin: 16px 0 8px;
+        }
         .shared-badge { 
             display: inline-block; 
             background: rgba(201, 162, 39, 0.2); 
@@ -1197,6 +1216,9 @@ SHARE_PAGE_HTML = '''
         <header>
             <h1>Wine Bot <span>3000</span></h1>
             <p class="subtitle">Wine Menu Markup Analysis</p>
+            {% if restaurant_name %}
+            <h2 class="restaurant-name">{{ restaurant_name }}</h2>
+            {% endif %}
             <span class="shared-badge">📤 Shared Analysis</span>
         </header>
         
@@ -1204,20 +1226,20 @@ SHARE_PAGE_HTML = '''
             {{ wine_count }} wines analyzed · {{ matched_count }} matched with retail prices
         </div>
         
-        <!-- Menu Image Section -->
+        <!-- Menu Image Section - starts expanded -->
         <div class="menu-image-section">
-            <div class="image-toggle" onclick="toggleImage()">
+            <div class="image-toggle expanded" onclick="toggleImage()">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
                     <circle cx="8.5" cy="8.5" r="1.5"/>
                     <polyline points="21 15 16 10 5 21"/>
                 </svg>
-                <span id="toggle-text">View Original Menu</span>
+                <span id="toggle-text">Hide Original Menu</span>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px;">
                     <polyline points="6 9 12 15 18 9"/>
                 </svg>
             </div>
-            <div class="image-container" id="image-container">
+            <div class="image-container expanded" id="image-container">
                 <img src="/share/{{ analysis_id }}/image" alt="Original wine menu" class="menu-image" onclick="openLightbox()">
             </div>
         </div>
@@ -1283,6 +1305,28 @@ SHARE_PAGE_HTML = '''
         const analysisData = {{ analysis_data | safe }};
         const wines = analysisData.wines || [];
         
+        // Sort wines by markup percent ascending, N/A values at the bottom
+        const sortedWines = [...wines].sort((a, b) => {
+            const aMarkup = a.markup_percent;
+            const bMarkup = b.markup_percent;
+            
+            const aIsNull = aMarkup === null || aMarkup === undefined;
+            const bIsNull = bMarkup === null || bMarkup === undefined;
+            
+            // N/A values go to the end
+            if (aIsNull && bIsNull) {
+                // Both N/A - sort by menu price ascending
+                const aPrice = a.menu_price || 0;
+                const bPrice = b.menu_price || 0;
+                return aPrice - bPrice;
+            }
+            if (aIsNull) return 1;  // a goes to end
+            if (bIsNull) return -1; // b goes to end
+            
+            // Both have values - sort ascending
+            return aMarkup - bMarkup;
+        });
+        
         function formatPrice(price) {
             if (price === null || price === undefined) return '<span class="na">N/A</span>';
             return '$' + price.toFixed(2);
@@ -1297,7 +1341,7 @@ SHARE_PAGE_HTML = '''
         }
         
         const tbody = document.getElementById('results-body');
-        wines.forEach(wine => {
+        sortedWines.forEach(wine => {
             const row = document.createElement('tr');
             row.innerHTML = `
                 <td class="wine-name">${wine.display_name || wine.original_name}</td>
