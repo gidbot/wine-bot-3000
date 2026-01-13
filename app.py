@@ -765,17 +765,20 @@ def index():
     return send_file(html_path)
 
 
-@app.route("/analyze", methods=["POST"])
-def analyze():
+@app.route("/extract", methods=["POST"])
+def extract():
     """
-    Analyze a wine menu image.
+    Extract wines from a menu image using Claude Vision.
+    
+    This is Step 1 of the two-step flow. Returns extracted wines
+    without retail prices (no Wine Labs API calls).
     
     Expects JSON with:
     - image: base64-encoded image data
     - media_type: MIME type (e.g., "image/jpeg", "image/png")
     - context: (optional) user-provided context about the menu
     
-    Returns JSON with analyzed wine data and markups.
+    Returns JSON with extracted wine data (no prices yet).
     """
     try:
         data = request.get_json()
@@ -794,7 +797,7 @@ def analyze():
         if "," in image_base64:
             image_base64 = image_base64.split(",")[1]
         
-        # Step 1: Analyze menu with Claude Vision
+        # Analyze menu with Claude Vision
         if user_context:
             print(f"Analyzing menu with Claude Vision (with context: '{user_context[:50]}...')...")
         else:
@@ -821,23 +824,27 @@ def analyze():
             name = wine.get("name", "Unknown")
             vintage = wine.get("vintage", "NV")
             price = wine.get("price", "N/A")
-            query = f"{name} {vintage}" if vintage else name
+            is_glass = wine.get("is_glass", False)
             print(f"  {i}. {name}")
-            print(f"     Vintage: {vintage} | Menu Price: ${price}")
-            print(f"     Query to Wine Labs: \"{query}\"")
+            print(f"     Vintage: {vintage} | Menu Price: ${price} | Glass: {is_glass}")
         print(f"{'='*60}\n")
         
-        # Step 2: Process wines (lookup prices, calculate markups)
-        print("Looking up retail prices...")
-        results = process_wines(wines)
+        # Return extracted wines (no price lookup yet)
+        extracted_wines = []
+        for wine in wines:
+            extracted_wines.append({
+                "name": wine.get("name", "Unknown"),
+                "vintage": wine.get("vintage"),
+                "menu_price": wine.get("price"),
+                "is_glass": wine.get("is_glass", False),
+                "original_name": wine.get("name", "Unknown")
+            })
         
-        # Step 3: Return results
         return jsonify({
             "success": True,
-            "wines": results,
-            "total_wines": len(results),
-            "matched_wines": sum(1 for r in results if r["matched"]),
-            "analyzed_at": datetime.now().isoformat()
+            "wines": extracted_wines,
+            "total_wines": len(extracted_wines),
+            "extracted_at": datetime.now().isoformat()
         })
         
     except TimeoutError as e:
@@ -868,13 +875,110 @@ def analyze():
             "error_message": str(e)
         }), 400
     except Exception as e:
-        print(f"Error analyzing menu: {e}")
+        print(f"Error extracting wines: {e}")
         return jsonify({
             "error": "server_error",
             "error_message": f"An unexpected error occurred: {str(e)}",
             "suggestions": [
                 "Try uploading a different image",
                 "Refresh the page and try again"
+            ]
+        }), 500
+
+
+@app.route("/lookup", methods=["POST"])
+def lookup():
+    """
+    Look up retail prices for selected wines.
+    
+    This is Step 2 of the two-step flow. Takes selected wines
+    and calls Wine Labs API for prices.
+    
+    Expects JSON with:
+    - wines: array of wine objects with name, vintage, menu_price, is_glass
+    
+    Returns JSON with wines including retail prices and markups.
+    """
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({"error": "No data provided"}), 400
+        
+        wines = data.get("wines", [])
+        
+        if not wines:
+            return jsonify({"error": "No wines provided"}), 400
+        
+        if len(wines) > 10:
+            return jsonify({
+                "error": "too_many_wines",
+                "error_message": "Maximum 10 wines can be looked up at once"
+            }), 400
+        
+        # Convert to format expected by process_wines
+        wines_to_process = []
+        for wine in wines:
+            wines_to_process.append({
+                "name": wine.get("name", "Unknown"),
+                "vintage": wine.get("vintage"),
+                "price": wine.get("menu_price"),
+                "is_glass": wine.get("is_glass", False)
+            })
+        
+        print(f"\n{'='*60}")
+        print(f"LOOKING UP PRICES FOR {len(wines_to_process)} SELECTED WINES:")
+        print(f"{'='*60}")
+        for i, wine in enumerate(wines_to_process, 1):
+            name = wine.get("name", "Unknown")
+            vintage = wine.get("vintage", "NV")
+            price = wine.get("price", "N/A")
+            query = f"{name} {vintage}" if vintage else name
+            print(f"  {i}. {name}")
+            print(f"     Vintage: {vintage} | Menu Price: ${price}")
+            print(f"     Query to Wine Labs: \"{query}\"")
+        print(f"{'='*60}\n")
+        
+        # Process wines (lookup prices, calculate markups)
+        print("Looking up retail prices...")
+        results = process_wines(wines_to_process)
+        
+        return jsonify({
+            "success": True,
+            "wines": results,
+            "total_wines": len(results),
+            "matched_wines": sum(1 for r in results if r["matched"]),
+            "analyzed_at": datetime.now().isoformat()
+        })
+        
+    except TimeoutError as e:
+        print(f"Timeout error: {e}")
+        return jsonify({
+            "error": "timeout",
+            "error_message": str(e),
+            "suggestions": [
+                "Try again in a few moments",
+                "Select fewer wines"
+            ]
+        }), 504
+    except ConnectionError as e:
+        print(f"Connection error: {e}")
+        return jsonify({
+            "error": "connection_error",
+            "error_message": str(e),
+            "suggestions": [
+                "Check your internet connection",
+                "Try again in a few moments"
+            ]
+        }), 503
+    except Exception as e:
+        print(f"Error looking up prices: {e}")
+        return jsonify({
+            "error": "server_error",
+            "error_message": f"An unexpected error occurred: {str(e)}",
+            "suggestions": [
+                "Try again in a few moments",
+                "Select fewer wines"
             ]
         }), 500
 
@@ -1006,134 +1110,229 @@ SHARE_PAGE_HTML = '''
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Wine Bot 3000 - Shared Analysis</title>
+    <title>🤖🍷 Wine Bot 3000 - Shared Analysis</title>
     <meta property="og:title" content="Wine Menu Analysis - Wine Bot 3000">
     <meta property="og:description" content="Check out this wine menu markup analysis!">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600&family=Source+Sans+3:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg-primary: #0f0f14;
-            --bg-secondary: #1a1a24;
-            --bg-card: rgba(255, 255, 255, 0.03);
-            --border-subtle: rgba(255, 255, 255, 0.08);
-            --text-primary: #f5f5f7;
-            --text-secondary: #8e8e93;
-            --text-muted: #636366;
-            --accent-gold: #c9a227;
-            --accent-green: #34c759;
-            --accent-red: #ff453a;
+            --bg-primary: #0a0a1a;
+            --bg-secondary: #1a1a3a;
+            --bg-card: rgba(255, 255, 255, 0.05);
+            --border-subtle: rgba(0, 212, 255, 0.2);
+            --text-primary: #e8e8e8;
+            --text-secondary: #a0a0b0;
+            --text-muted: #6a6a7a;
+            --accent-cyan: #00d4ff;
+            --accent-cyan-glow: rgba(0, 212, 255, 0.4);
+            --accent-pink: #ff00aa;
+            --accent-pink-glow: rgba(255, 0, 170, 0.4);
+            --accent-gold: var(--accent-cyan);
+            --accent-green: #00ff88;
+            --accent-red: #ff3366;
+            --glass-bg: rgba(255, 255, 255, 0.05);
+            --glass-border: rgba(255, 255, 255, 0.1);
         }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            font-family: 'Source Sans 3', sans-serif;
-            background: var(--bg-primary);
+            font-family: 'Share Tech Mono', monospace;
+            background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 50%, var(--bg-primary) 100%);
             min-height: 100vh;
             color: var(--text-primary);
-            background-image: 
-                radial-gradient(ellipse at 20% 0%, rgba(114, 47, 55, 0.15) 0%, transparent 50%),
-                radial-gradient(ellipse at 80% 100%, rgba(201, 162, 39, 0.08) 0%, transparent 50%);
+            background-attachment: fixed;
+            position: relative;
         }
-        .container { max-width: 1100px; margin: 0 auto; padding: 40px 24px; }
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-image: 
+                radial-gradient(ellipse at 30% 20%, var(--accent-cyan-glow) 0%, transparent 40%),
+                radial-gradient(ellipse at 70% 80%, var(--accent-pink-glow) 0%, transparent 40%),
+                linear-gradient(rgba(0, 212, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 212, 255, 0.03) 1px, transparent 1px);
+            background-size: 100% 100%, 100% 100%, 50px 50px, 50px 50px;
+            pointer-events: none;
+            z-index: 0;
+        }
+        .container { max-width: 1100px; margin: 0 auto; padding: 40px 24px; position: relative; z-index: 1; }
         header { text-align: center; margin-bottom: 32px; }
-        h1 { font-family: 'Playfair Display', serif; font-size: 2rem; font-weight: 500; margin-bottom: 8px; }
-        h1 span { color: var(--accent-gold); }
-        .subtitle { color: var(--text-secondary); font-size: 0.95rem; }
+        h1 { 
+            font-family: 'Orbitron', sans-serif; 
+            font-size: 1.8rem; 
+            font-weight: 700; 
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            text-shadow: 0 0 10px var(--accent-cyan-glow), 0 2px 0 #808080;
+        }
+        h1 span { 
+            background: linear-gradient(180deg, var(--accent-cyan) 0%, var(--accent-pink) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .subtitle { 
+            font-family: 'Share Tech Mono', monospace;
+            color: var(--accent-cyan); 
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            opacity: 0.8;
+        }
         .restaurant-name { 
-            font-family: 'Playfair Display', serif;
-            font-size: 1.6rem; 
-            font-weight: 500;
-            color: var(--accent-gold);
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.3rem; 
+            font-weight: 600;
+            color: var(--accent-pink);
             margin: 16px 0 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            text-shadow: 0 0 10px var(--accent-pink-glow);
         }
         .shared-badge { 
             display: inline-block; 
-            background: rgba(201, 162, 39, 0.2); 
-            color: var(--accent-gold);
-            padding: 4px 12px; 
-            border-radius: 20px; 
-            font-size: 0.8rem;
+            background: rgba(0, 212, 255, 0.15); 
+            color: var(--accent-cyan);
+            padding: 6px 16px; 
+            border-radius: 4px; 
+            font-family: 'Orbitron', sans-serif;
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
             margin-top: 12px;
+            border: 1px solid var(--accent-cyan);
+            box-shadow: 0 0 10px var(--accent-cyan-glow);
         }
         .meta-info {
             text-align: center;
-            color: var(--text-muted);
+            color: var(--text-secondary);
             font-size: 0.85rem;
             margin-bottom: 24px;
         }
         .results-card {
-            background: var(--bg-card);
-            border: 1px solid var(--border-subtle);
+            background: var(--glass-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
             border-radius: 16px;
             overflow: hidden;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1);
         }
         .results-table { width: 100%; border-collapse: collapse; }
         .results-table th {
+            font-family: 'Orbitron', sans-serif;
             text-align: left;
             padding: 14px 12px;
-            background: rgba(0, 0, 0, 0.2);
-            color: var(--text-muted);
+            background: linear-gradient(180deg, rgba(0, 212, 255, 0.15) 0%, rgba(0, 0, 0, 0.3) 100%);
+            color: var(--accent-cyan);
             font-weight: 500;
-            font-size: 0.75rem;
+            font-size: 0.65rem;
             text-transform: uppercase;
-            letter-spacing: 0.08em;
+            letter-spacing: 0.1em;
+            border-bottom: 1px solid var(--accent-cyan);
         }
         .results-table td {
             padding: 16px 12px;
-            border-bottom: 1px solid var(--border-subtle);
+            border-bottom: 1px solid rgba(0, 212, 255, 0.1);
         }
         .results-table tbody tr:last-child td { border-bottom: none; }
+        .results-table tbody tr:hover { background: rgba(0, 212, 255, 0.05); }
         .wine-name { font-weight: 500; }
-        .price { font-family: monospace; }
-        .price-menu { color: #e4c767; }
+        .price { font-family: 'Share Tech Mono', monospace; }
+        .price-menu { color: var(--accent-pink); text-shadow: 0 0 8px var(--accent-pink-glow); }
         .price-retail { color: var(--accent-green); }
         .markup-high { color: var(--accent-red); font-weight: 600; }
-        .markup-medium { color: #ff9f0a; font-weight: 600; }
+        .markup-medium { color: #ff6600; font-weight: 600; }
         .markup-low { color: var(--accent-green); font-weight: 600; }
         .na { color: var(--text-muted); font-style: italic; }
-        .cta-section { text-align: center; margin-top: 40px; padding: 32px; background: var(--bg-card); border-radius: 16px; }
-        .cta-section h2 { font-family: 'Playfair Display', serif; font-size: 1.4rem; margin-bottom: 12px; }
+        .cta-section { 
+            text-align: center; 
+            margin-top: 40px; 
+            padding: 32px; 
+            background: var(--glass-bg); 
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+        .cta-section h2 { 
+            font-family: 'Orbitron', sans-serif; 
+            font-size: 1.2rem; 
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--accent-cyan);
+            text-shadow: 0 0 10px var(--accent-cyan-glow);
+        }
         .cta-section p { color: var(--text-secondary); margin-bottom: 20px; }
         .cta-btn {
             display: inline-block;
-            background: linear-gradient(135deg, var(--accent-gold), #a88620);
-            color: #0f0f14;
+            font-family: 'Orbitron', sans-serif;
+            background: linear-gradient(180deg, #e8e8e8 0%, #c0c0c0 50%, #808080 100%);
+            color: var(--bg-primary);
             padding: 14px 32px;
-            border-radius: 12px;
+            border-radius: 8px;
             text-decoration: none;
             font-weight: 600;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            border: 1px solid #e8e8e8;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.8);
             transition: transform 0.2s, box-shadow 0.2s;
         }
-        .cta-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(201, 162, 39, 0.3); }
-        footer { text-align: center; margin-top: 40px; color: var(--text-muted); font-size: 0.85rem; }
+        .cta-btn:hover { 
+            transform: translateY(-2px); 
+            box-shadow: 0 4px 20px var(--accent-cyan-glow), 0 0 30px var(--accent-cyan-glow), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+        }
+        footer { 
+            font-family: 'Orbitron', sans-serif;
+            text-align: center; 
+            margin-top: 40px; 
+            color: var(--accent-cyan); 
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            text-shadow: 0 0 8px var(--accent-cyan-glow);
+        }
         
         /* Menu Image Section */
         .menu-image-section {
             margin-bottom: 24px;
         }
         .image-toggle {
+            font-family: 'Orbitron', sans-serif;
             display: flex;
             align-items: center;
             justify-content: center;
             gap: 8px;
             padding: 12px 20px;
-            background: var(--bg-card);
-            border: 1px solid var(--border-subtle);
-            border-radius: 12px;
-            color: var(--text-secondary);
+            background: var(--glass-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--accent-cyan);
+            border-radius: 8px;
+            color: var(--accent-cyan);
             cursor: pointer;
             transition: all 0.2s;
-            font-size: 0.9rem;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
         }
         .image-toggle:hover {
-            background: rgba(255, 255, 255, 0.05);
-            color: var(--text-primary);
+            background: rgba(0, 212, 255, 0.1);
+            box-shadow: 0 0 20px var(--accent-cyan-glow);
         }
         .image-toggle svg {
             width: 18px;
             height: 18px;
             transition: transform 0.3s;
+            stroke: var(--accent-cyan);
         }
         .image-toggle.expanded svg {
             transform: rotate(180deg);
@@ -1142,10 +1341,12 @@ SHARE_PAGE_HTML = '''
             max-height: 0;
             overflow: hidden;
             transition: max-height 0.4s ease-out, padding 0.4s ease-out;
-            background: var(--bg-card);
+            background: var(--glass-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
             border-radius: 0 0 12px 12px;
-            margin-top: -12px;
-            border: 1px solid var(--border-subtle);
+            margin-top: -8px;
+            border: 1px solid var(--glass-border);
             border-top: none;
         }
         .image-container.expanded {
@@ -1159,6 +1360,7 @@ SHARE_PAGE_HTML = '''
             border-radius: 8px;
             cursor: pointer;
             transition: opacity 0.2s;
+            border: 1px solid var(--glass-border);
         }
         .menu-image:hover {
             opacity: 0.9;
@@ -1214,6 +1416,8 @@ SHARE_PAGE_HTML = '''
             .results-card {
                 background: transparent;
                 border: none;
+                box-shadow: none;
+                backdrop-filter: none;
             }
             .results-table thead { display: none; }
             .results-table { display: block; }
@@ -1224,10 +1428,17 @@ SHARE_PAGE_HTML = '''
             }
             .results-table tbody tr {
                 display: block;
-                background: var(--bg-card);
-                border: 1px solid var(--border-subtle);
+                background: var(--glass-bg);
+                backdrop-filter: blur(8px);
+                -webkit-backdrop-filter: blur(8px);
+                border: 1px solid var(--glass-border);
                 border-radius: 12px;
                 padding: 16px;
+                box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            }
+            .results-table tbody tr:hover {
+                background: rgba(0, 212, 255, 0.08);
+                border-color: var(--accent-cyan);
             }
             .results-table td.wine-name {
                 display: block;
@@ -1235,7 +1446,7 @@ SHARE_PAGE_HTML = '''
                 font-size: 1rem;
                 font-weight: 600;
                 padding: 0 0 12px 0;
-                border-bottom: 1px solid var(--border-subtle);
+                border-bottom: 1px solid rgba(0, 212, 255, 0.2);
                 margin-bottom: 12px;
                 white-space: normal;
                 line-height: 1.4;
@@ -1244,7 +1455,7 @@ SHARE_PAGE_HTML = '''
                 display: block;
                 font-size: 0.85rem;
                 font-weight: 400;
-                color: var(--text-secondary);
+                color: var(--accent-cyan);
                 margin-top: 4px;
             }
             .results-table td.price,
@@ -1258,12 +1469,14 @@ SHARE_PAGE_HTML = '''
             .results-table td[data-label]::before {
                 content: attr(data-label);
                 display: block;
-                font-size: 0.7rem;
+                font-family: 'Orbitron', sans-serif;
+                font-size: 0.6rem;
                 font-weight: 500;
-                color: var(--text-muted);
+                color: var(--accent-cyan);
                 text-transform: uppercase;
-                letter-spacing: 0.05em;
+                letter-spacing: 0.08em;
                 margin-bottom: 4px;
+                opacity: 0.8;
             }
             .results-table td.wine-name::before { display: none; }
         }
@@ -1272,12 +1485,12 @@ SHARE_PAGE_HTML = '''
 <body>
     <div class="container">
         <header>
-            <h1>Wine Bot <span>3000</span></h1>
+            <h1>🤖🍷 Wine Bot <span>3000</span></h1>
             <p class="subtitle">Wine Menu Markup Analysis</p>
             {% if restaurant_name %}
             <h2 class="restaurant-name">{{ restaurant_name }}</h2>
             {% endif %}
-            <span class="shared-badge">📤 Shared Analysis</span>
+            <span class="shared-badge">🤖📤 Shared Analysis</span>
         </header>
         
         <div class="meta-info">
@@ -1320,10 +1533,10 @@ SHARE_PAGE_HTML = '''
         <div class="cta-section">
             <h2>Try it yourself!</h2>
             <p>Snap a photo of any wine menu to reveal the markups</p>
-            <a href="/" class="cta-btn">🍷 Analyze a Menu</a>
+            <a href="/" class="cta-btn">🤖🍷 Analyze a Menu</a>
         </div>
         
-        <footer>Wine Bot 3000</footer>
+        <footer>🤖🍷 Wine Bot 3000</footer>
     </div>
     
     <!-- Lightbox for full-size image -->
@@ -1423,46 +1636,95 @@ SHARE_EXPIRED_HTML = '''
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Wine Bot 3000 - Link Expired</title>
-    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500&family=Source+Sans+3:wght@300;400;500&display=swap" rel="stylesheet">
+    <title>🤖🍷 Wine Bot 3000 - Link Expired</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg-primary: #0f0f14;
-            --text-primary: #f5f5f7;
-            --text-secondary: #8e8e93;
-            --accent-gold: #c9a227;
+            --bg-primary: #0a0a1a;
+            --bg-secondary: #1a1a3a;
+            --text-primary: #e8e8e8;
+            --text-secondary: #a0a0b0;
+            --accent-cyan: #00d4ff;
+            --accent-cyan-glow: rgba(0, 212, 255, 0.4);
+            --accent-pink: #ff00aa;
+            --accent-pink-glow: rgba(255, 0, 170, 0.4);
         }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            font-family: 'Source Sans 3', sans-serif;
-            background: var(--bg-primary);
+            font-family: 'Share Tech Mono', monospace;
+            background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 50%, var(--bg-primary) 100%);
             min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
             color: var(--text-primary);
+            position: relative;
         }
-        .container { text-align: center; padding: 40px; max-width: 500px; }
-        .icon { font-size: 4rem; margin-bottom: 24px; opacity: 0.6; }
-        h1 { font-family: 'Playfair Display', serif; font-size: 2rem; margin-bottom: 16px; }
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-image: 
+                radial-gradient(ellipse at 30% 20%, var(--accent-cyan-glow) 0%, transparent 40%),
+                radial-gradient(ellipse at 70% 80%, var(--accent-pink-glow) 0%, transparent 40%),
+                linear-gradient(rgba(0, 212, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 212, 255, 0.03) 1px, transparent 1px);
+            background-size: 100% 100%, 100% 100%, 50px 50px, 50px 50px;
+            pointer-events: none;
+            z-index: 0;
+        }
+        .container { 
+            text-align: center; 
+            padding: 40px; 
+            max-width: 500px; 
+            position: relative; 
+            z-index: 1;
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+        .icon { font-size: 4rem; margin-bottom: 24px; filter: drop-shadow(0 0 20px var(--accent-pink-glow)); }
+        h1 { 
+            font-family: 'Orbitron', sans-serif; 
+            font-size: 1.5rem; 
+            margin-bottom: 16px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--accent-cyan);
+            text-shadow: 0 0 10px var(--accent-cyan-glow);
+        }
         p { color: var(--text-secondary); margin-bottom: 32px; line-height: 1.6; }
         .cta-btn {
             display: inline-block;
-            background: linear-gradient(135deg, var(--accent-gold), #a88620);
-            color: #0f0f14;
+            font-family: 'Orbitron', sans-serif;
+            background: linear-gradient(180deg, #e8e8e8 0%, #c0c0c0 50%, #808080 100%);
+            color: var(--bg-primary);
             padding: 14px 32px;
-            border-radius: 12px;
+            border-radius: 8px;
             text-decoration: none;
             font-weight: 600;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            border: 1px solid #e8e8e8;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .cta-btn:hover { 
+            transform: translateY(-2px); 
+            box-shadow: 0 4px 20px var(--accent-cyan-glow), 0 0 30px var(--accent-cyan-glow);
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="icon">🕐</div>
+        <div class="icon">🤖🕐</div>
         <h1>Link Expired</h1>
         <p>This shared analysis is no longer available. Shared links expire after 7 days to keep things tidy.</p>
-        <a href="/" class="cta-btn">🍷 Analyze a New Menu</a>
+        <a href="/" class="cta-btn">🤖🍷 Analyze a New Menu</a>
     </div>
 </body>
 </html>

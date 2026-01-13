@@ -3,26 +3,47 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Wine Bot 3000</title>
+    <title>🤖🍷 Wine Bot 3000</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600&family=Source+Sans+3:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg-primary: #0f0f14;
-            --bg-secondary: #1a1a24;
-            --bg-card: rgba(255, 255, 255, 0.03);
-            --border-subtle: rgba(255, 255, 255, 0.08);
-            --text-primary: #f5f5f7;
-            --text-secondary: #8e8e93;
-            --text-muted: #636366;
-            --accent-gold: #c9a227;
-            --accent-gold-light: #e4c767;
-            --accent-green: #34c759;
-            --accent-red: #ff453a;
-            --accent-burgundy: #722f37;
-            --accent-purple: #af52de;
-            --accent-orange: #ff9f0a;
+            /* Y2K Color Palette */
+            --bg-primary: #0a0a1a;
+            --bg-secondary: #1a1a3a;
+            --bg-card: rgba(255, 255, 255, 0.05);
+            --border-subtle: rgba(0, 212, 255, 0.2);
+            --text-primary: #e8e8e8;
+            --text-secondary: #a0a0b0;
+            --text-muted: #6a6a7a;
+            
+            /* Chrome/Metallic */
+            --chrome-light: #e8e8e8;
+            --chrome-mid: #c0c0c0;
+            --chrome-dark: #808080;
+            
+            /* Electric Cyan (Primary) */
+            --accent-cyan: #00d4ff;
+            --accent-cyan-glow: rgba(0, 212, 255, 0.4);
+            
+            /* Hot Pink (Accent) */
+            --accent-pink: #ff00aa;
+            --accent-pink-glow: rgba(255, 0, 170, 0.4);
+            
+            /* Legacy mappings for compatibility */
+            --accent-gold: var(--accent-cyan);
+            --accent-gold-light: var(--accent-cyan);
+            --accent-green: #00ff88;
+            --accent-red: #ff3366;
+            --accent-burgundy: #aa0055;
+            --accent-purple: #aa00ff;
+            --accent-orange: #ff6600;
+            
+            /* Glass effect */
+            --glass-bg: rgba(255, 255, 255, 0.05);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --glass-blur: 12px;
         }
 
         * {
@@ -32,19 +53,38 @@
         }
 
         body {
-            font-family: 'Source Sans 3', -apple-system, BlinkMacSystemFont, sans-serif;
-            background: var(--bg-primary);
+            font-family: 'Share Tech Mono', monospace;
+            background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 50%, var(--bg-primary) 100%);
             min-height: 100vh;
             color: var(--text-primary);
+            background-attachment: fixed;
+            position: relative;
+        }
+
+        /* Y2K Grid overlay effect */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
             background-image: 
-                radial-gradient(ellipse at 20% 0%, rgba(114, 47, 55, 0.15) 0%, transparent 50%),
-                radial-gradient(ellipse at 80% 100%, rgba(201, 162, 39, 0.08) 0%, transparent 50%);
+                radial-gradient(ellipse at 30% 20%, var(--accent-cyan-glow) 0%, transparent 40%),
+                radial-gradient(ellipse at 70% 80%, var(--accent-pink-glow) 0%, transparent 40%),
+                linear-gradient(rgba(0, 212, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 212, 255, 0.03) 1px, transparent 1px);
+            background-size: 100% 100%, 100% 100%, 50px 50px, 50px 50px;
+            pointer-events: none;
+            z-index: 0;
         }
 
         .container {
             max-width: 1100px;
             margin: 0 auto;
             padding: 60px 24px;
+            position: relative;
+            z-index: 1;
         }
 
         header {
@@ -53,23 +93,33 @@
         }
 
         h1 {
-            font-family: 'Playfair Display', Georgia, serif;
-            font-size: 3rem;
-            font-weight: 500;
-            color: var(--text-primary);
-            letter-spacing: -0.02em;
+            font-family: 'Orbitron', sans-serif;
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: var(--chrome-light);
+            letter-spacing: 0.05em;
             margin-bottom: 12px;
+            text-transform: uppercase;
+            text-shadow: 
+                0 0 10px var(--accent-cyan-glow),
+                0 0 20px var(--accent-cyan-glow),
+                0 2px 0 var(--chrome-dark);
         }
 
         h1 span {
-            color: var(--accent-gold);
+            background: linear-gradient(180deg, var(--accent-cyan) 0%, var(--accent-pink) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
         }
 
         .subtitle {
-            color: var(--text-secondary);
-            font-size: 1.1rem;
-            font-weight: 300;
-            letter-spacing: 0.02em;
+            font-family: 'Share Tech Mono', monospace;
+            color: var(--accent-cyan);
+            font-size: 1rem;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            opacity: 0.8;
         }
 
         /* Upload Section */
@@ -78,8 +128,10 @@
         }
 
         .upload-zone {
-            background: var(--bg-card);
-            border: 2px dashed var(--border-subtle);
+            background: var(--glass-bg);
+            backdrop-filter: blur(var(--glass-blur));
+            -webkit-backdrop-filter: blur(var(--glass-blur));
+            border: 1px solid var(--glass-border);
             border-radius: 20px;
             padding: 60px 40px;
             text-align: center;
@@ -87,12 +139,39 @@
             transition: all 0.3s ease;
             position: relative;
             overflow: hidden;
+            box-shadow: 
+                0 8px 32px rgba(0, 0, 0, 0.3),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        }
+
+        /* Metallic border effect */
+        .upload-zone::before {
+            content: '';
+            position: absolute;
+            top: -2px;
+            left: -2px;
+            right: -2px;
+            bottom: -2px;
+            background: linear-gradient(135deg, var(--accent-cyan) 0%, transparent 50%, var(--accent-pink) 100%);
+            border-radius: 22px;
+            z-index: -1;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .upload-zone:hover::before,
+        .upload-zone.drag-over::before {
+            opacity: 1;
         }
 
         .upload-zone:hover,
         .upload-zone.drag-over {
-            border-color: var(--accent-gold);
-            background: rgba(201, 162, 39, 0.05);
+            border-color: transparent;
+            background: rgba(0, 212, 255, 0.08);
+            box-shadow: 
+                0 8px 32px rgba(0, 0, 0, 0.3),
+                0 0 30px var(--accent-cyan-glow),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
         }
 
         .upload-zone.drag-over {
@@ -103,15 +182,16 @@
             width: 72px;
             height: 72px;
             margin: 0 auto 20px;
-            opacity: 0.6;
+            opacity: 0.8;
         }
 
         .upload-icon svg {
             width: 100%;
             height: 100%;
-            stroke: var(--accent-gold);
+            stroke: var(--accent-cyan);
             stroke-width: 1.5;
             fill: none;
+            filter: drop-shadow(0 0 8px var(--accent-cyan-glow));
         }
 
         .upload-text {
@@ -134,36 +214,59 @@
         }
 
         .btn {
+            font-family: 'Orbitron', sans-serif;
             padding: 14px 28px;
-            border-radius: 12px;
-            font-size: 1rem;
-            font-weight: 500;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-weight: 600;
             cursor: pointer;
             transition: all 0.2s ease;
-            border: none;
+            border: 1px solid var(--glass-border);
             display: inline-flex;
             align-items: center;
             gap: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            position: relative;
+            overflow: hidden;
         }
 
         .btn-primary {
-            background: linear-gradient(135deg, var(--accent-gold) 0%, #a88620 100%);
-            color: #0f0f14;
+            background: linear-gradient(180deg, var(--chrome-light) 0%, var(--chrome-mid) 50%, var(--chrome-dark) 100%);
+            color: var(--bg-primary);
+            border: 1px solid var(--chrome-light);
+            box-shadow: 
+                0 4px 15px rgba(0, 0, 0, 0.3),
+                inset 0 1px 0 rgba(255, 255, 255, 0.8),
+                inset 0 -1px 0 rgba(0, 0, 0, 0.2);
         }
 
         .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 24px rgba(201, 162, 39, 0.3);
+            background: linear-gradient(180deg, #fff 0%, var(--chrome-light) 50%, var(--chrome-mid) 100%);
+            box-shadow: 
+                0 4px 20px rgba(0, 212, 255, 0.4),
+                0 0 30px var(--accent-cyan-glow),
+                inset 0 1px 0 rgba(255, 255, 255, 0.9),
+                inset 0 -1px 0 rgba(0, 0, 0, 0.2);
         }
 
         .btn-secondary {
-            background: var(--bg-secondary);
-            color: var(--text-primary);
-            border: 1px solid var(--border-subtle);
+            background: var(--glass-bg);
+            backdrop-filter: blur(var(--glass-blur));
+            -webkit-backdrop-filter: blur(var(--glass-blur));
+            color: var(--accent-cyan);
+            border: 1px solid var(--accent-cyan);
+            box-shadow: 
+                0 4px 15px rgba(0, 0, 0, 0.2),
+                inset 0 1px 0 rgba(255, 255, 255, 0.05);
         }
 
         .btn-secondary:hover {
-            background: rgba(255, 255, 255, 0.1);
+            background: rgba(0, 212, 255, 0.1);
+            box-shadow: 
+                0 4px 20px var(--accent-cyan-glow),
+                0 0 20px var(--accent-cyan-glow),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
         }
 
         .btn svg {
@@ -190,14 +293,19 @@
         }
 
         .preview-card {
-            background: var(--bg-card);
-            border: 1px solid var(--border-subtle);
+            background: var(--glass-bg);
+            backdrop-filter: blur(var(--glass-blur));
+            -webkit-backdrop-filter: blur(var(--glass-blur));
+            border: 1px solid var(--glass-border);
             border-radius: 20px;
             padding: 24px;
             display: flex;
             gap: 24px;
             align-items: center;
             flex-wrap: wrap;
+            box-shadow: 
+                0 8px 32px rgba(0, 0, 0, 0.3),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
         }
 
         .preview-image {
@@ -206,6 +314,7 @@
             object-fit: cover;
             border-radius: 12px;
             background: var(--bg-secondary);
+            border: 1px solid var(--glass-border);
         }
 
         .preview-info {
@@ -290,13 +399,32 @@
             display: none;
             position: fixed;
             inset: 0;
-            background: rgba(15, 15, 20, 0.95);
-            backdrop-filter: blur(12px);
+            background: linear-gradient(180deg, rgba(10, 10, 26, 0.98) 0%, rgba(26, 26, 58, 0.98) 100%);
+            backdrop-filter: blur(20px);
             z-index: 1000;
             justify-content: center;
             align-items: center;
             flex-direction: column;
             padding: 24px;
+        }
+
+        .loading-overlay::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: 
+                radial-gradient(circle at 30% 30%, var(--accent-cyan-glow) 0%, transparent 50%),
+                radial-gradient(circle at 70% 70%, var(--accent-pink-glow) 0%, transparent 50%);
+            animation: pulseGlow 4s ease-in-out infinite;
+            pointer-events: none;
+        }
+
+        @keyframes pulseGlow {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 0.6; }
         }
 
         .loading-overlay.active {
@@ -307,69 +435,87 @@
             text-align: center;
             max-width: 400px;
             width: 100%;
+            position: relative;
+            z-index: 1;
         }
 
         /* Wine Glass Animation */
         .wine-glass-icon {
             font-size: 4rem;
             margin-bottom: 24px;
-            animation: pour 2s ease-in-out infinite;
+            animation: robotPour 2s ease-in-out infinite;
             display: inline-block;
+            filter: drop-shadow(0 0 20px var(--accent-cyan-glow));
         }
 
-        @keyframes pour {
-            0%, 100% { transform: rotate(-15deg); }
-            50% { transform: rotate(15deg); }
+        @keyframes robotPour {
+            0%, 100% { transform: rotate(-15deg) scale(1); }
+            25% { transform: rotate(0deg) scale(1.05); }
+            50% { transform: rotate(15deg) scale(1); }
+            75% { transform: rotate(0deg) scale(1.05); }
         }
 
         .loading-text {
-            font-size: 1.4rem;
-            color: var(--text-primary);
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.2rem;
+            color: var(--accent-cyan);
             margin-bottom: 8px;
-            font-weight: 500;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            text-shadow: 0 0 10px var(--accent-cyan-glow);
         }
 
         .loading-subtext {
-            color: var(--text-muted);
-            font-size: 0.95rem;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
             margin-bottom: 24px;
+            letter-spacing: 0.02em;
         }
 
         /* Progress Steps */
         .loading-steps {
             display: flex;
             justify-content: center;
-            gap: 8px;
+            gap: 12px;
             margin-bottom: 24px;
         }
 
         .loading-step {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: var(--border-subtle);
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+            background: rgba(0, 212, 255, 0.2);
+            border: 1px solid rgba(0, 212, 255, 0.3);
             transition: all 0.3s ease;
         }
 
         .loading-step.active {
-            background: var(--accent-gold);
+            background: var(--accent-cyan);
+            box-shadow: 0 0 15px var(--accent-cyan-glow);
             transform: scale(1.2);
         }
 
         .loading-step.done {
             background: var(--accent-green);
+            border-color: var(--accent-green);
+            box-shadow: 0 0 10px rgba(0, 255, 136, 0.4);
         }
 
         /* Wine Discovery List */
         .wine-discovery {
             text-align: left;
-            background: rgba(255, 255, 255, 0.03);
+            background: var(--glass-bg);
+            backdrop-filter: blur(var(--glass-blur));
+            -webkit-backdrop-filter: blur(var(--glass-blur));
+            border: 1px solid var(--glass-border);
             border-radius: 12px;
             padding: 16px;
             margin-top: 16px;
             max-height: 250px;
             overflow-y: auto;
             display: none;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
         }
 
         .wine-discovery.visible {
@@ -378,11 +524,13 @@
         }
 
         .wine-discovery-title {
-            font-size: 0.8rem;
+            font-family: 'Orbitron', sans-serif;
+            font-size: 0.7rem;
             text-transform: uppercase;
-            letter-spacing: 0.05em;
-            color: var(--text-muted);
+            letter-spacing: 0.1em;
+            color: var(--accent-cyan);
             margin-bottom: 12px;
+            text-shadow: 0 0 8px var(--accent-cyan-glow);
         }
 
         .wine-discovery-list {
@@ -393,7 +541,7 @@
 
         .wine-discovery-item {
             padding: 8px 0;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            border-bottom: 1px solid rgba(0, 212, 255, 0.1);
             color: var(--text-primary);
             font-size: 0.9rem;
             opacity: 0;
@@ -412,8 +560,9 @@
         }
 
         .wine-discovery-item .wine-price {
-            color: var(--accent-gold);
+            color: var(--accent-pink);
             float: right;
+            text-shadow: 0 0 8px var(--accent-pink-glow);
         }
 
         @keyframes slideIn {
@@ -459,9 +608,13 @@
         }
 
         .results-title {
-            font-family: 'Playfair Display', Georgia, serif;
-            font-size: 1.75rem;
-            font-weight: 500;
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.5rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--accent-cyan);
+            text-shadow: 0 0 10px var(--accent-cyan-glow);
         }
 
         .results-meta {
@@ -479,10 +632,15 @@
 
         /* Table */
         .results-card {
-            background: var(--bg-card);
-            border: 1px solid var(--border-subtle);
+            background: var(--glass-bg);
+            backdrop-filter: blur(var(--glass-blur));
+            -webkit-backdrop-filter: blur(var(--glass-blur));
+            border: 1px solid var(--glass-border);
             border-radius: 20px;
             overflow: hidden;
+            box-shadow: 
+                0 8px 32px rgba(0, 0, 0, 0.3),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
         }
 
         .results-table {
@@ -491,20 +649,21 @@
         }
 
         .results-table th {
+            font-family: 'Orbitron', sans-serif;
             text-align: left;
             padding: 18px 16px;
-            background: rgba(0, 0, 0, 0.2);
-            color: var(--text-muted);
+            background: linear-gradient(180deg, rgba(0, 212, 255, 0.15) 0%, rgba(0, 0, 0, 0.3) 100%);
+            color: var(--accent-cyan);
             font-weight: 500;
-            font-size: 0.8rem;
+            font-size: 0.7rem;
             text-transform: uppercase;
-            letter-spacing: 0.08em;
-            border-bottom: 1px solid var(--border-subtle);
+            letter-spacing: 0.1em;
+            border-bottom: 1px solid var(--accent-cyan);
         }
 
         .results-table td {
             padding: 20px 16px;
-            border-bottom: 1px solid var(--border-subtle);
+            border-bottom: 1px solid rgba(0, 212, 255, 0.1);
             vertical-align: middle;
         }
 
@@ -513,7 +672,7 @@
         }
 
         .results-table tbody tr:hover {
-            background: rgba(255, 255, 255, 0.02);
+            background: rgba(0, 212, 255, 0.05);
         }
 
         .wine-name {
@@ -751,14 +910,17 @@
         /* Error State */
         .error-message {
             display: none;
-            background: linear-gradient(145deg, rgba(255, 69, 58, 0.1), rgba(255, 69, 58, 0.05));
-            border: 1px solid rgba(255, 69, 58, 0.3);
-            border-radius: 16px;
+            background: linear-gradient(145deg, rgba(255, 51, 102, 0.15), rgba(255, 51, 102, 0.05));
+            backdrop-filter: blur(var(--glass-blur));
+            -webkit-backdrop-filter: blur(var(--glass-blur));
+            border: 1px solid var(--accent-red);
+            border-radius: 12px;
             padding: 24px;
             margin-bottom: 24px;
             max-width: 500px;
             margin-left: auto;
             margin-right: auto;
+            box-shadow: 0 0 20px rgba(255, 51, 102, 0.2);
         }
 
         .error-message.active {
@@ -766,13 +928,15 @@
         }
         
         .error-message.timeout {
-            background: linear-gradient(145deg, rgba(255, 159, 10, 0.1), rgba(255, 159, 10, 0.05));
-            border-color: rgba(255, 159, 10, 0.3);
+            background: linear-gradient(145deg, rgba(255, 102, 0, 0.15), rgba(255, 102, 0, 0.05));
+            border-color: var(--accent-orange);
+            box-shadow: 0 0 20px rgba(255, 102, 0, 0.2);
         }
         
         .error-message.network, .error-message.connection_error {
-            background: linear-gradient(145deg, rgba(255, 159, 10, 0.1), rgba(255, 159, 10, 0.05));
-            border-color: rgba(255, 159, 10, 0.3);
+            background: linear-gradient(145deg, rgba(255, 102, 0, 0.15), rgba(255, 102, 0, 0.05));
+            border-color: var(--accent-orange);
+            box-shadow: 0 0 20px rgba(255, 102, 0, 0.2);
         }
 
         .error-header {
@@ -787,8 +951,11 @@
         }
         
         .error-header strong {
-            font-size: 1.1rem;
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1rem;
             color: var(--text-primary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
         }
         
         .error-text {
@@ -942,19 +1109,27 @@
 
         /* Share Toast */
         .share-toast {
+            font-family: 'Orbitron', sans-serif;
             position: fixed;
             bottom: 24px;
             left: 50%;
             transform: translateX(-50%) translateY(100px);
-            background: var(--accent-green);
-            color: #0f0f14;
+            background: linear-gradient(180deg, rgba(0, 255, 136, 0.9) 0%, rgba(0, 180, 100, 0.95) 100%);
+            color: var(--bg-primary);
             padding: 14px 24px;
-            border-radius: 12px;
+            border-radius: 8px;
             display: flex;
             align-items: center;
             gap: 10px;
-            font-weight: 500;
-            box-shadow: 0 8px 32px rgba(52, 199, 89, 0.3);
+            font-weight: 600;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            box-shadow: 
+                0 4px 20px rgba(0, 255, 136, 0.4),
+                0 0 30px rgba(0, 255, 136, 0.3),
+                inset 0 1px 0 rgba(255, 255, 255, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.2);
             opacity: 0;
             transition: transform 0.3s ease, opacity 0.3s ease;
             z-index: 1001;
@@ -989,11 +1164,17 @@
         }
 
         .modal-content {
-            background: var(--bg-secondary);
-            border: 1px solid var(--border-subtle);
+            background: linear-gradient(180deg, rgba(26, 26, 58, 0.95) 0%, rgba(10, 10, 26, 0.98) 100%);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--accent-cyan);
             border-radius: 16px;
             padding: 32px;
             max-width: 420px;
+            box-shadow: 
+                0 0 40px var(--accent-cyan-glow),
+                0 20px 60px rgba(0, 0, 0, 0.5),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
             width: 100%;
             animation: modalSlideIn 0.3s ease;
         }
@@ -1010,24 +1191,28 @@
         }
 
         .modal-content h3 {
-            font-family: 'Playfair Display', serif;
-            font-size: 1.5rem;
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.25rem;
             margin-bottom: 12px;
-            color: var(--text-primary);
+            color: var(--accent-cyan);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            text-shadow: 0 0 10px var(--accent-cyan-glow);
         }
 
         .modal-content p {
             color: var(--text-secondary);
             margin-bottom: 20px;
-            font-size: 0.95rem;
+            font-size: 0.9rem;
         }
 
         .modal-content input {
+            font-family: 'Share Tech Mono', monospace;
             width: 100%;
             padding: 14px 16px;
-            border: 1px solid var(--border-subtle);
+            border: 1px solid var(--glass-border);
             border-radius: 10px;
-            background: var(--bg-primary);
+            background: rgba(0, 0, 0, 0.4);
             color: var(--text-primary);
             font-size: 1rem;
             margin-bottom: 24px;
@@ -1036,7 +1221,8 @@
 
         .modal-content input:focus {
             outline: none;
-            border-color: var(--accent-gold);
+            border-color: var(--accent-cyan);
+            box-shadow: 0 0 15px var(--accent-cyan-glow);
         }
 
         .modal-content input::placeholder {
@@ -1058,14 +1244,168 @@
             height: 16px;
         }
 
+        /* Wine Selection Modal */
+        .wine-selection-modal {
+            max-width: 600px;
+            max-height: 80vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .selection-cap-notice {
+            font-family: 'Share Tech Mono', monospace;
+            background: rgba(255, 0, 170, 0.15);
+            border: 1px solid var(--accent-pink);
+            border-radius: 8px;
+            padding: 12px 16px;
+            margin-bottom: 16px;
+            font-size: 0.85rem;
+            color: var(--accent-pink);
+            text-shadow: 0 0 8px var(--accent-pink-glow);
+        }
+
+        .selection-count {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 0.9rem;
+            color: var(--accent-cyan);
+            text-align: center;
+            margin-bottom: 16px;
+            padding: 8px;
+            background: rgba(0, 212, 255, 0.1);
+            border-radius: 8px;
+            border: 1px solid rgba(0, 212, 255, 0.3);
+        }
+
+        .selection-count #selected-count {
+            font-weight: 700;
+            font-size: 1.1rem;
+        }
+
+        .wine-selection-list {
+            flex: 1;
+            overflow-y: auto;
+            max-height: 400px;
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            background: rgba(0, 0, 0, 0.3);
+            margin-bottom: 20px;
+        }
+
+        .wine-selection-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 14px 16px;
+            border-bottom: 1px solid rgba(0, 212, 255, 0.1);
+            transition: background 0.2s;
+            cursor: pointer;
+        }
+
+        .wine-selection-item:last-child {
+            border-bottom: none;
+        }
+
+        .wine-selection-item:hover {
+            background: rgba(0, 212, 255, 0.05);
+        }
+
+        .wine-selection-item.disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .wine-selection-item.disabled:hover {
+            background: transparent;
+        }
+
+        .wine-selection-checkbox {
+            width: 22px;
+            height: 22px;
+            border: 2px solid var(--accent-cyan);
+            border-radius: 4px;
+            background: transparent;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            transition: all 0.2s;
+        }
+
+        .wine-selection-item.selected .wine-selection-checkbox {
+            background: var(--accent-cyan);
+            box-shadow: 0 0 10px var(--accent-cyan-glow);
+        }
+
+        .wine-selection-checkbox::after {
+            content: '';
+            display: none;
+            width: 6px;
+            height: 10px;
+            border: solid var(--bg-primary);
+            border-width: 0 2px 2px 0;
+            transform: rotate(45deg);
+            margin-bottom: 2px;
+        }
+
+        .wine-selection-item.selected .wine-selection-checkbox::after {
+            display: block;
+        }
+
+        .wine-selection-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .wine-selection-name {
+            font-weight: 500;
+            color: var(--text-primary);
+            font-size: 0.95rem;
+            margin-bottom: 4px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .wine-selection-details {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        .wine-selection-details .vintage {
+            color: var(--accent-cyan);
+            margin-right: 8px;
+        }
+
+        .wine-selection-details .price {
+            color: var(--accent-pink);
+        }
+
+        .wine-selection-details .glass-indicator {
+            background: rgba(255, 0, 170, 0.2);
+            color: var(--accent-pink);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            margin-left: 8px;
+        }
+
+        #proceed-lookup:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
         /* Footer */
         footer {
+            font-family: 'Orbitron', sans-serif;
             text-align: center;
             margin-top: 60px;
             padding-top: 24px;
-            border-top: 1px solid var(--border-subtle);
-            color: var(--text-muted);
-            font-size: 0.85rem;
+            border-top: 1px solid rgba(0, 212, 255, 0.2);
+            color: var(--accent-cyan);
+            font-size: 0.8rem;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            text-shadow: 0 0 8px var(--accent-cyan-glow);
         }
 
         footer a {
@@ -1099,6 +1439,7 @@
             .btn {
                 width: 100%;
                 justify-content: center;
+                min-height: 48px; /* Touch-friendly */
             }
 
             .results-header {
@@ -1121,6 +1462,8 @@
                 padding: 0;
                 background: transparent;
                 border: none;
+                box-shadow: none;
+                backdrop-filter: none;
             }
 
             /* Hide table header on mobile */
@@ -1138,18 +1481,22 @@
                 gap: 12px;
             }
 
-            /* Transform each row into a card */
+            /* Transform each row into a Y2K glass card */
             .results-table tbody tr.wine-row {
                 display: block;
-                background: var(--bg-card);
-                border: 1px solid var(--border-subtle);
+                background: var(--glass-bg);
+                backdrop-filter: blur(8px);
+                -webkit-backdrop-filter: blur(8px);
+                border: 1px solid var(--glass-border);
                 border-radius: 12px;
                 padding: 16px;
                 margin: 0;
+                box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
             }
 
             .results-table tbody tr.wine-row:hover {
-                background: var(--bg-card);
+                background: rgba(0, 212, 255, 0.08);
+                border-color: var(--accent-cyan);
             }
 
             /* Hide vintage column (shown inline with name) */
@@ -1165,7 +1512,7 @@
                 font-weight: 600;
                 color: var(--text-primary);
                 padding: 0 0 12px 0;
-                border-bottom: 1px solid var(--border-subtle);
+                border-bottom: 1px solid rgba(0, 212, 255, 0.2);
                 margin-bottom: 12px;
                 max-width: none;
                 overflow: visible;
@@ -1179,7 +1526,7 @@
                 display: block;
                 font-size: 0.85rem;
                 font-weight: 400;
-                color: var(--text-secondary);
+                color: var(--accent-cyan);
                 margin-top: 4px;
             }
 
@@ -1198,12 +1545,14 @@
             .results-table td[data-label]::before {
                 content: attr(data-label);
                 display: block;
-                font-size: 0.7rem;
+                font-family: 'Orbitron', sans-serif;
+                font-size: 0.6rem;
                 font-weight: 500;
-                color: var(--text-muted);
+                color: var(--accent-cyan);
                 text-transform: uppercase;
-                letter-spacing: 0.05em;
+                letter-spacing: 0.08em;
                 margin-bottom: 4px;
+                opacity: 0.8;
             }
 
             /* Don't show label for wine name */
@@ -1298,6 +1647,28 @@
             .modal-buttons {
                 flex-direction: column-reverse;
             }
+
+            /* Wine selection modal mobile */
+            .wine-selection-modal {
+                max-height: 85vh;
+            }
+
+            .wine-selection-list {
+                max-height: 50vh;
+            }
+
+            .wine-selection-item {
+                padding: 12px 14px;
+            }
+
+            .wine-selection-name {
+                font-size: 0.9rem;
+            }
+
+            .selection-cap-notice {
+                font-size: 0.8rem;
+                padding: 10px 12px;
+            }
         }
 
         /* Extra small screens */
@@ -1374,13 +1745,39 @@
             overflow-x: auto;
             -webkit-overflow-scrolling: touch;
         }
+
+        /* Reduced motion preference */
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
+
+        /* Fallback for devices that don't support backdrop-filter */
+        @supports not (backdrop-filter: blur(12px)) {
+            .upload-zone,
+            .preview-card,
+            .results-card,
+            .wine-discovery,
+            .error-message,
+            .modal-content,
+            .share-toast {
+                background: rgba(26, 26, 58, 0.95) !important;
+            }
+            
+            .results-table tbody tr.wine-row {
+                background: rgba(26, 26, 58, 0.9) !important;
+            }
+        }
     </style>
 </head>
 <body>
     <!-- Loading Overlay -->
     <div class="loading-overlay" id="loading">
         <div class="loading-content">
-            <div class="wine-glass-icon">🍷</div>
+            <div class="wine-glass-icon">🤖🍷</div>
             <div class="loading-steps">
                 <div class="loading-step active" id="step-1"></div>
                 <div class="loading-step" id="step-2"></div>
@@ -1390,7 +1787,7 @@
             <div class="loading-subtext" id="loading-status">AI is reading your wine list</div>
             
             <div class="wine-discovery" id="wine-discovery">
-                <div class="wine-discovery-title">🔍 Wines Found</div>
+                <div class="wine-discovery-title">🤖🔍 Wines Found</div>
                 <ul class="wine-discovery-list" id="wine-discovery-list">
                     <!-- Wines will be added here dynamically -->
                 </ul>
@@ -1421,7 +1818,7 @@
 
         <!-- No Wines Found State -->
         <div class="no-wines-found" id="no-wines-found">
-            <div class="no-wines-icon">🔍</div>
+            <div class="no-wines-icon">🤖🔍</div>
             <h2>No Wines Found</h2>
             <p class="no-wines-message">We couldn't identify any wines in this image.</p>
             <div class="no-wines-suggestions">
@@ -1520,7 +1917,7 @@
         <!-- Results Section -->
         <section class="results-section" id="results-section">
             <div class="results-header">
-                <h2 class="results-title">Markup Analysis</h2>
+                <h2 class="results-title">🤖 Markup Analysis</h2>
                 <div class="results-meta">
                     <span id="total-wines">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1586,7 +1983,7 @@
             
             <!-- Share Success Toast -->
             <div class="share-toast" id="share-toast">
-                <span class="share-toast-icon">✓</span>
+                <span class="share-toast-icon">🤖✓</span>
                 <span class="share-toast-text">Link copied to clipboard!</span>
             </div>
             
@@ -1611,10 +2008,30 @@
                     </div>
                 </div>
             </div>
+            
+            <!-- Wine Selection Modal -->
+            <div class="modal-overlay" id="wine-selection-modal">
+                <div class="modal-content wine-selection-modal">
+                    <h3>🤖 Select Wines for Price Lookup</h3>
+                    <p class="selection-cap-notice">⚡ Select up to 10 wines. Price lookups are capped to manage API costs.</p>
+                    <div class="selection-count">
+                        <span id="selected-count">0</span>/10 selected
+                    </div>
+                    <div class="wine-selection-list" id="wine-selection-list">
+                        <!-- Dynamically populated -->
+                    </div>
+                    <div class="modal-buttons">
+                        <button class="btn btn-secondary" id="cancel-selection">Cancel</button>
+                        <button class="btn btn-primary" id="proceed-lookup" disabled>
+                            🔍 Get Prices
+                        </button>
+                    </div>
+                </div>
+            </div>
         </section>
 
         <footer>
-            Wine Bot 3000
+            🤖🍷 Wine Bot 3000
         </footer>
     </div>
 
@@ -1654,6 +2071,13 @@
         const resultsBody = document.getElementById('results-body');
         const totalWinesSpan = document.getElementById('total-wines');
         const matchedWinesSpan = document.getElementById('matched-wines');
+        
+        // Wine Selection Modal Elements
+        const wineSelectionModal = document.getElementById('wine-selection-modal');
+        const wineSelectionList = document.getElementById('wine-selection-list');
+        const selectedCountSpan = document.getElementById('selected-count');
+        const cancelSelectionBtn = document.getElementById('cancel-selection');
+        const proceedLookupBtn = document.getElementById('proceed-lookup');
 
         let currentFile = null;
         let currentBase64 = null;
@@ -1661,6 +2085,11 @@
         let winesData = [];
         let currentResults = null;  // Store full results for sharing
         let currentSort = { field: 'markup_percent', direction: 'asc' };
+        
+        // Wine selection state
+        let extractedWines = [];  // All wines extracted by Claude
+        let selectedWineIndices = new Set();  // Indices of selected wines
+        const MAX_WINES = 10;
 
         // Reusable SVG Icons
         const ICONS = {
@@ -1860,7 +2289,7 @@
 
         function showDiscoveredWines(wines) {
             // Update to step 2
-            showLoading(2, 'Found ' + wines.length + ' wines!', 'Looking up prices & scores...');
+            showLoading(2, '🤖 Found ' + wines.length + ' wines!', 'Looking up prices...');
             
             // Build wine list HTML
             wineDiscoveryList.innerHTML = wines.map(wine => {
@@ -1877,6 +2306,94 @@
             loading.classList.remove('active');
             wineDiscovery.classList.remove('visible');
         }
+
+        // Wine Selection Modal Functions
+        function showWineSelectionModal(wines) {
+            extractedWines = wines;
+            selectedWineIndices.clear();
+            
+            // Pre-select first 10 wines (or all if fewer)
+            const preSelectCount = Math.min(wines.length, MAX_WINES);
+            for (let i = 0; i < preSelectCount; i++) {
+                selectedWineIndices.add(i);
+            }
+            
+            renderWineSelectionList();
+            updateSelectionCount();
+            wineSelectionModal.classList.add('visible');
+        }
+
+        function hideWineSelectionModal() {
+            wineSelectionModal.classList.remove('visible');
+            extractedWines = [];
+            selectedWineIndices.clear();
+        }
+
+        function renderWineSelectionList() {
+            wineSelectionList.innerHTML = extractedWines.map((wine, index) => {
+                const isSelected = selectedWineIndices.has(index);
+                const isDisabled = !isSelected && selectedWineIndices.size >= MAX_WINES;
+                
+                const vintage = wine.vintage ? `<span class="vintage">${wine.vintage}</span>` : '';
+                const price = wine.menu_price ? `<span class="price">$${wine.menu_price}</span>` : '';
+                const glassIndicator = wine.is_glass ? '<span class="glass-indicator">🥂 Glass</span>' : '';
+                
+                return `
+                    <div class="wine-selection-item ${isSelected ? 'selected' : ''} ${isDisabled ? 'disabled' : ''}" 
+                         data-index="${index}">
+                        <div class="wine-selection-checkbox"></div>
+                        <div class="wine-selection-info">
+                            <div class="wine-selection-name">${wine.name || wine.original_name}</div>
+                            <div class="wine-selection-details">
+                                ${vintage}${price}${glassIndicator}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            // Add click handlers to items
+            wineSelectionList.querySelectorAll('.wine-selection-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    const index = parseInt(item.dataset.index);
+                    toggleWineSelection(index);
+                });
+            });
+        }
+
+        function toggleWineSelection(index) {
+            if (selectedWineIndices.has(index)) {
+                // Deselect
+                selectedWineIndices.delete(index);
+            } else if (selectedWineIndices.size < MAX_WINES) {
+                // Select (only if under limit)
+                selectedWineIndices.add(index);
+            }
+            // If at limit and trying to select, do nothing
+            
+            renderWineSelectionList();
+            updateSelectionCount();
+        }
+
+        function updateSelectionCount() {
+            selectedCountSpan.textContent = selectedWineIndices.size;
+            proceedLookupBtn.disabled = selectedWineIndices.size === 0;
+        }
+
+        function getSelectedWines() {
+            return Array.from(selectedWineIndices)
+                .sort((a, b) => a - b)
+                .map(index => extractedWines[index]);
+        }
+
+        // Wine Selection Modal Event Listeners
+        cancelSelectionBtn.addEventListener('click', () => {
+            hideWineSelectionModal();
+            hideLoading();
+            // Reset to preview state
+            analyzeBtn.disabled = false;
+            analyzeBtn.textContent = 'Analyze Menu';
+        });
 
         // File Handling
         function handleFile(file) {
@@ -2257,7 +2774,7 @@
             return { mediaType, imageData };
         }
 
-        // Analysis
+        // Step 1: Extract wines from image (Claude only)
         analyzeBtn.addEventListener('click', async () => {
             if (!currentBase64 || !isImageReady) {
                 showError('Please wait for the image to fully load');
@@ -2268,7 +2785,7 @@
             hideNoWinesFound();
 
             hideError();
-            showLoading(1, 'Scanning menu...', 'AI is reading your wine list');
+            showLoading(1, '🤖 Scanning menu...', 'AI is reading your wine list');
 
             try {
                 // Safely extract media type and image data
@@ -2284,7 +2801,8 @@
                     const contextInput = document.getElementById('context-input');
                     const userContext = contextInput ? contextInput.value.trim() : '';
                     
-                    response = await fetch('/analyze', {
+                    // Step 1: Extract wines only (no price lookup)
+                    response = await fetch('/extract', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -2348,19 +2866,98 @@
                     return;
                 }
 
-                // Show discovered wines with animation
+                // Show discovered wines briefly
                 const winePreview = data.wines.map(w => ({
-                    name: w.display_name || w.original_name,
+                    name: w.name || w.original_name,
                     vintage: w.vintage,
                     price: w.menu_price
                 }));
                 showDiscoveredWines(winePreview);
                 
                 // Wait a moment to let user see the wines found
-                await new Promise(resolve => setTimeout(resolve, 1500));
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                // Hide loading and show wine selection modal
+                hideLoading();
+                showWineSelectionModal(data.wines);
+
+            } catch (error) {
+                // Handle structured errors with suggestions
+                if (error.type && error.suggestions) {
+                    showErrorWithSuggestions(error.message, error.suggestions, error.type);
+                } else {
+                    // Fallback for simple error strings
+                    showError(error.message || 'An unexpected error occurred');
+                }
+                hideLoading();
+            }
+        });
+
+        // Step 2: Look up prices for selected wines
+        proceedLookupBtn.addEventListener('click', async () => {
+            const selectedWines = getSelectedWines();
+            
+            if (selectedWines.length === 0) {
+                return;
+            }
+            
+            // Hide modal and show loading
+            hideWineSelectionModal();
+            showLoading(2, '🤖 Found ' + selectedWines.length + ' wines!', 'Looking up prices...');
+            
+            try {
+                // Create AbortController for timeout
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout for lookup
+                
+                let response;
+                try {
+                    response = await fetch('/lookup', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            wines: selectedWines
+                        }),
+                        signal: controller.signal
+                    });
+                } catch (fetchError) {
+                    clearTimeout(timeoutId);
+                    if (fetchError.name === 'AbortError') {
+                        throw {
+                            type: 'timeout',
+                            message: 'Price lookup took too long. Please try again with fewer wines.',
+                            suggestions: [
+                                'Select fewer wines',
+                                'Try again in a few moments'
+                            ]
+                        };
+                    }
+                    throw {
+                        type: 'network',
+                        message: 'Could not connect to the server. Please check your internet connection.',
+                        suggestions: [
+                            'Check your internet connection',
+                            'Try again in a few moments'
+                        ]
+                    };
+                }
+                clearTimeout(timeoutId);
+                
+                const data = await response.json();
+                
+                // Handle errors
+                if (!response.ok || data.error) {
+                    throw {
+                        type: data.error || 'unknown',
+                        message: data.error_message || 'Price lookup failed',
+                        suggestions: data.suggestions || []
+                    };
+                }
                 
                 // Update to step 3
-                showLoading(3, 'Almost done!', 'Calculating markups...');
+                showLoading(3, '🤖 Almost done!', 'Calculating markups...');
                 await new Promise(resolve => setTimeout(resolve, 500));
 
                 // Display results
