@@ -669,6 +669,7 @@ def match_wine_to_lwin(search_query: str) -> dict:
     }
     
     print(f"  [MATCH] Searching for: {search_query}")
+    print(f"  [MATCH] Payload: {payload}")
     
     # Don't cache empty results - matches may become available later
     data = cached_post("https://winelabs.ai/api/search_wines", payload, cache_empty_results=False)
