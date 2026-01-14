@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🤖🍷 Wine Bot 3000</title>
+    <title>🍷🤖 Wine Bot 3000</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
@@ -1777,7 +1777,7 @@
     <!-- Loading Overlay -->
     <div class="loading-overlay" id="loading">
         <div class="loading-content">
-            <div class="wine-glass-icon">🤖🍷</div>
+            <div class="wine-glass-icon">🍷🤖</div>
             <div class="loading-steps">
                 <div class="loading-step active" id="step-1"></div>
                 <div class="loading-step" id="step-2"></div>
@@ -1787,7 +1787,7 @@
             <div class="loading-subtext" id="loading-status">AI is reading your wine list</div>
             
             <div class="wine-discovery" id="wine-discovery">
-                <div class="wine-discovery-title">🤖🔍 Wines Found</div>
+                <div class="wine-discovery-title">🍷🤖 Wines Found</div>
                 <ul class="wine-discovery-list" id="wine-discovery-list">
                     <!-- Wines will be added here dynamically -->
                 </ul>
@@ -1818,7 +1818,7 @@
 
         <!-- No Wines Found State -->
         <div class="no-wines-found" id="no-wines-found">
-            <div class="no-wines-icon">🤖🔍</div>
+            <div class="no-wines-icon">🍷🤖</div>
             <h2>No Wines Found</h2>
             <p class="no-wines-message">We couldn't identify any wines in this image.</p>
             <div class="no-wines-suggestions">
@@ -1917,7 +1917,7 @@
         <!-- Results Section -->
         <section class="results-section" id="results-section">
             <div class="results-header">
-                <h2 class="results-title">🤖 Markup Analysis</h2>
+                <h2 class="results-title">🍷🤖 Markup Analysis</h2>
                 <div class="results-meta">
                     <span id="total-wines">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1983,7 +1983,7 @@
             
             <!-- Share Success Toast -->
             <div class="share-toast" id="share-toast">
-                <span class="share-toast-icon">🤖✓</span>
+                <span class="share-toast-icon">🍷🤖</span>
                 <span class="share-toast-text">Link copied to clipboard!</span>
             </div>
             
@@ -2009,30 +2009,31 @@
                 </div>
             </div>
             
-            <!-- Wine Selection Modal -->
-            <div class="modal-overlay" id="wine-selection-modal">
-                <div class="modal-content wine-selection-modal">
-                    <h3>🤖 Select Wines for Price Lookup</h3>
-                    <p class="selection-cap-notice">⚡ Select up to 10 wines. Price lookups are capped to manage API costs.</p>
-                    <div class="selection-count">
-                        <span id="selected-count">0</span>/10 selected
-                    </div>
-                    <div class="wine-selection-list" id="wine-selection-list">
-                        <!-- Dynamically populated -->
-                    </div>
-                    <div class="modal-buttons">
-                        <button class="btn btn-secondary" id="cancel-selection">Cancel</button>
-                        <button class="btn btn-primary" id="proceed-lookup" disabled>
-                            🔍 Get Prices
-                        </button>
-                    </div>
-                </div>
-            </div>
         </section>
 
         <footer>
-            🤖🍷 Wine Bot 3000
+            🍷🤖 Wine Bot 3000
         </footer>
+    </div>
+    
+    <!-- Wine Selection Modal (outside container for proper z-index) -->
+    <div class="modal-overlay" id="wine-selection-modal">
+        <div class="modal-content wine-selection-modal">
+            <h3>🍷🤖 Select Wines for Price Lookup</h3>
+            <p class="selection-cap-notice">🍷🤖 Select up to 10 wines. Price lookups are capped to manage API costs.</p>
+            <div class="selection-count">
+                <span id="selected-count">0</span>/10 selected
+            </div>
+            <div class="wine-selection-list" id="wine-selection-list">
+                <!-- Dynamically populated -->
+            </div>
+            <div class="modal-buttons">
+                <button class="btn btn-secondary" id="cancel-selection">Cancel</button>
+                <button class="btn btn-primary" id="proceed-lookup" disabled>
+                    🍷🤖 Get Prices
+                </button>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -2289,7 +2290,7 @@
 
         function showDiscoveredWines(wines) {
             // Update to step 2
-            showLoading(2, '🤖 Found ' + wines.length + ' wines!', 'Looking up prices...');
+            showLoading(2, '🍷🤖 Found ' + wines.length + ' wines!', 'Looking up prices...');
             
             // Build wine list HTML
             wineDiscoveryList.innerHTML = wines.map(wine => {
@@ -2785,7 +2786,7 @@
             hideNoWinesFound();
 
             hideError();
-            showLoading(1, '🤖 Scanning menu...', 'AI is reading your wine list');
+            showLoading(1, '🍷🤖 Scanning menu...', 'AI is reading your wine list');
 
             try {
                 // Safely extract media type and image data
@@ -2903,7 +2904,7 @@
             
             // Hide modal and show loading
             hideWineSelectionModal();
-            showLoading(2, '🤖 Found ' + selectedWines.length + ' wines!', 'Looking up prices...');
+            showLoading(2, '🍷🤖 Found ' + selectedWines.length + ' wines!', 'Looking up prices...');
             
             try {
                 // Create AbortController for timeout
@@ -2957,7 +2958,7 @@
                 }
                 
                 // Update to step 3
-                showLoading(3, '🤖 Almost done!', 'Calculating markups...');
+                showLoading(3, '🍷🤖 Almost done!', 'Calculating markups...');
                 await new Promise(resolve => setTimeout(resolve, 500));
 
                 // Display results

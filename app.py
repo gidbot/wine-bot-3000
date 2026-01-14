@@ -7,6 +7,10 @@ looks up retail prices via Wine Labs API, and calculates markups.
 
 import os
 import json
+
+# Load environment variables from .env file (for local development)
+from dotenv import load_dotenv
+load_dotenv()
 import hashlib
 import re
 import sqlite3
@@ -1110,7 +1114,7 @@ SHARE_PAGE_HTML = '''
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🤖🍷 Wine Bot 3000 - Shared Analysis</title>
+    <title>🍷🤖 Wine Bot 3000 - Shared Analysis</title>
     <meta property="og:title" content="Wine Menu Analysis - Wine Bot 3000">
     <meta property="og:description" content="Check out this wine menu markup analysis!">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1485,12 +1489,12 @@ SHARE_PAGE_HTML = '''
 <body>
     <div class="container">
         <header>
-            <h1>🤖🍷 Wine Bot <span>3000</span></h1>
+            <h1>🍷🤖 Wine Bot <span>3000</span></h1>
             <p class="subtitle">Wine Menu Markup Analysis</p>
             {% if restaurant_name %}
             <h2 class="restaurant-name">{{ restaurant_name }}</h2>
             {% endif %}
-            <span class="shared-badge">🤖📤 Shared Analysis</span>
+            <span class="shared-badge">🍷🤖📤 Shared Analysis</span>
         </header>
         
         <div class="meta-info">
@@ -1533,10 +1537,10 @@ SHARE_PAGE_HTML = '''
         <div class="cta-section">
             <h2>Try it yourself!</h2>
             <p>Snap a photo of any wine menu to reveal the markups</p>
-            <a href="/" class="cta-btn">🤖🍷 Analyze a Menu</a>
+            <a href="/" class="cta-btn">🍷🤖 Analyze a Menu</a>
         </div>
         
-        <footer>🤖🍷 Wine Bot 3000</footer>
+        <footer>🍷🤖 Wine Bot 3000</footer>
     </div>
     
     <!-- Lightbox for full-size image -->
@@ -1636,7 +1640,7 @@ SHARE_EXPIRED_HTML = '''
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🤖🍷 Wine Bot 3000 - Link Expired</title>
+    <title>🍷🤖 Wine Bot 3000 - Link Expired</title>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -1721,10 +1725,10 @@ SHARE_EXPIRED_HTML = '''
 </head>
 <body>
     <div class="container">
-        <div class="icon">🤖🕐</div>
+        <div class="icon">🍷🤖🕐</div>
         <h1>Link Expired</h1>
         <p>This shared analysis is no longer available. Shared links expire after 7 days to keep things tidy.</p>
-        <a href="/" class="cta-btn">🤖🍷 Analyze a New Menu</a>
+        <a href="/" class="cta-btn">🍷🤖 Analyze a New Menu</a>
     </div>
 </body>
 </html>
