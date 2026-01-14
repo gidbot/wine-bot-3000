@@ -469,18 +469,26 @@ GLASS vs BOTTLE:
 - Glass pours are typically $10-35, bottles are typically $40+
 
 Return the data as a JSON array with objects containing these fields:
-- "name": the wine name formatted as above (producer + cuvée/appellation, NO grape varieties)
+- "name": the wine name formatted as above (producer + cuvée/appellation, NO grape varieties) - this is for DISPLAY
+- "search_query": optimized query for Wine Labs database search - include producer, wine name, AND grape variety/region to maximize match chances. Strip quotes, ellipses, and special characters. Be generous with details.
 - "vintage": the year as a string (or null if not shown)
 - "price": the numeric price (just the number, no currency symbol)
 - "is_glass": true if this is a by-the-glass price, false if by the bottle
+
+SEARCH_QUERY EXAMPLES (include grape variety and region when visible on menu):
+- Menu: "Sancet 2022 'Ca fait rire les oiseaux...' petit manseng SW, Fr" -> search_query: "Domaine Sancet Ca fait rire les oiseaux Petit Manseng"
+- Menu: "O'Neill Latta 2024 'Vo' viognier Rancho Arroyo Grande, CA" -> search_query: "O'Neill Latta Vo Viognier Arroyo Grande"
+- Menu: "Mazette 2024 'Blanc de Blancs' chardonnay Edna Valley, CA" -> search_query: "Mazette Blanc de Blancs Chardonnay Edna Valley"
+- Menu: "La Grande Colline 2022 'Bibendum' cinsault Rhone Valley, Fr" -> search_query: "La Grande Colline Bibendum Cinsault Rhone"
+- Menu: "Marie Rocher 2022 'Voila l'Ete' pineau d'aunis+ Loire, Fr" -> search_query: "Marie Rocher Voila l'Ete Pineau d'Aunis Loire"
 
 Only include wines where you can clearly read the name. If a price is not visible or unclear, use null.
 
 Return ONLY the JSON array, no other text. Example format:
 [
-  {"name": "Domaine Fourrier Bourgogne Blanc", "vintage": "2023", "price": 150, "is_glass": false},
-  {"name": "Bollinger La Grande Année", "vintage": "2014", "price": 28, "is_glass": true},
-  {"name": "Krug Grande Cuvée", "vintage": null, "price": 450, "is_glass": false}
+  {"name": "Domaine Fourrier Bourgogne Blanc", "search_query": "Domaine Fourrier Bourgogne Blanc Chardonnay", "vintage": "2023", "price": 150, "is_glass": false},
+  {"name": "Bollinger La Grande Annee", "search_query": "Bollinger La Grande Annee Champagne", "vintage": "2014", "price": 28, "is_glass": true},
+  {"name": "Krug Grande Cuvee", "search_query": "Krug Grande Cuvee Champagne", "vintage": null, "price": 450, "is_glass": false}
 ]"""
 
     try:
@@ -561,21 +569,31 @@ def cached_post(endpoint: str, payload: dict, cache_empty_results: bool = True) 
     Make a cached POST request to Wine Labs API.
     
     Args:
-        endpoint: API endpoint path
+        endpoint: API endpoint path (or full URL for external endpoints)
         payload: Request payload
-        cache_empty_results: If False, don't cache responses with empty "results" arrays.
+        cache_empty_results: If False, don't cache responses with empty/no-match results.
                             This allows retrying later when data might be available.
     
     Returns None on failure (timeout, connection error, or API error).
     Failures are logged but don't raise exceptions - allows partial results.
     """
+    
+    def has_results(data: dict) -> bool:
+        """Check if response has meaningful results based on endpoint type."""
+        if "search_wines" in endpoint:
+            # search_wines returns results in search_results array
+            search_results = data.get("search_results", [])
+            return len(search_results) > 0 and search_results[0].get("match") is not None
+        else:
+            # Other endpoints use results array
+            return bool(data.get("results", []))
+    
     cached_response = cache.get(endpoint, payload)
     if cached_response is not None:
         # If we cached an empty result and cache_empty_results is False,
         # ignore the cache and try again (data might be available now)
         if not cache_empty_results:
-            results = cached_response.get("results", [])
-            if not results:
+            if not has_results(cached_response):
                 print(f"[CACHE SKIP - empty results] {endpoint}")
                 # Fall through to make a fresh API call
             else:
@@ -586,7 +604,12 @@ def cached_post(endpoint: str, payload: dict, cache_empty_results: bool = True) 
             return cached_response
     
     print(f"[API CALL] {endpoint}")
-    url = f"{WINE_LABS_BASE_URL}{endpoint}"
+    
+    # Handle full URLs vs relative paths
+    if endpoint.startswith("http"):
+        url = endpoint
+    else:
+        url = f"{WINE_LABS_BASE_URL}{endpoint}"
     
     try:
         response = requests.post(
@@ -602,8 +625,7 @@ def cached_post(endpoint: str, payload: dict, cache_empty_results: bool = True) 
         data = response.json()
         
         # Only cache if we have results OR if caching empty results is allowed
-        results = data.get("results", [])
-        if results or cache_empty_results:
+        if has_results(data) or cache_empty_results:
             cache.set(endpoint, payload, data)
         else:
             print(f"  [NOT CACHING - no results found]")
@@ -620,10 +642,71 @@ def cached_post(endpoint: str, payload: dict, cache_empty_results: bool = True) 
         return None
 
 
-def get_retail_price(query: str) -> dict:
+def match_wine_to_lwin(search_query: str) -> dict:
     """
-    Get retail price by searching /price_stats with wine name query.
-    Uses winelabs_price from the response.
+    Match a wine search query using Wine Labs search_wines endpoint.
+    
+    Returns dict with:
+    - wl_display_name: Wine Labs matched wine name (for display)
+    - wine_id: Wine Labs wine ID (for price lookup)
+    - matched: True if a match was found
+    """
+    result = {
+        "wl_display_name": None,
+        "wine_id": None,
+        "lwin": None,
+        "matched": False
+    }
+    
+    if not search_query:
+        return result
+    
+    payload = {
+        "user_id": WINE_LABS_USER_ID,
+        "searchQuery": search_query,
+        "page": 1,
+        "resultsPerPage": 1
+    }
+    
+    print(f"  [MATCH] Searching for: {search_query}")
+    
+    # Don't cache empty results - matches may become available later
+    data = cached_post("https://winelabs.ai/api/search_wines", payload, cache_empty_results=False)
+    
+    if data:
+        # search_wines returns results in search_results array
+        # wine name is in "match" field, wine ID is in "wine_id" field
+        search_results = data.get("search_results", [])
+        print(f"  [MATCH] Results count: {len(search_results)}")
+        
+        if search_results:
+            first_result = search_results[0]
+            matched_wine = first_result.get("match")
+            wine_id = first_result.get("wine_id")
+            
+            print(f"  [MATCH] Matched wine: {matched_wine}")
+            print(f"  [MATCH] Wine ID: {wine_id}")
+            
+            if matched_wine and wine_id:
+                result["wl_display_name"] = matched_wine
+                result["wine_id"] = wine_id
+                result["matched"] = True
+                return result
+        else:
+            print(f"  [MATCH] No search_results in response")
+    else:
+        print(f"  [MATCH] API returned None")
+    
+    return result
+
+
+def get_retail_price(wine_id: str) -> dict:
+    """
+    Get retail price using Wine Labs wine-location-details endpoint.
+    Filters for USA shops and calculates average of original_price.
+    
+    Args:
+        wine_id: The Wine Labs wine ID from search_wines
     
     Returns dict with: price, count, source
     """
@@ -633,34 +716,75 @@ def get_retail_price(query: str) -> dict:
         "source": None
     }
     
-    if not query:
+    if not wine_id:
         return result
     
-    payload = {
-        "user_id": WINE_LABS_USER_ID,
-        "query": query,
-        "currency": "USD"
-    }
+    # Build URL with query parameters
+    url = (
+        f"https://winelabs.ai/api/wine-location-details"
+        f"?wineId={wine_id}"
+        f"&currency=USD"
+        f"&locationType=retail"
+        f"&userId={WINE_LABS_USER_ID}"
+        f"&limit=1000"
+        f"&offset=0"
+    )
     
-    print(f"  [PRICE] Searching for: {query}")
+    print(f"  [PRICE] Looking up wine ID: {wine_id}")
     
-    # Don't cache empty results - price data may become available later
-    data = cached_post("/price_stats", payload, cache_empty_results=False)
+    # Use cache key based on wine_id
+    cache_key = f"wine-location-details:{wine_id}"
+    cached_response = cache.get(cache_key, {})
+    
+    if cached_response is not None:
+        print(f"[CACHED] {cache_key}")
+        data = cached_response
+    else:
+        print(f"[API CALL] wine-location-details for {wine_id}")
+        try:
+            response = requests.get(url, verify=False, timeout=WINE_LABS_TIMEOUT)
+            if response.status_code != 200:
+                print(f"  Wine Labs API error: {response.status_code}")
+                return result
+            data = response.json()
+            cache.set(cache_key, {}, data)
+        except requests.exceptions.Timeout:
+            print(f"  Wine Labs API timeout")
+            return result
+        except requests.exceptions.ConnectionError:
+            print(f"  Wine Labs API connection error")
+            return result
+        except Exception as e:
+            print(f"  Wine Labs API error: {e}")
+            return result
     
     if data:
-        results_list = data.get("results", [])
-        print(f"  [PRICE] Results count: {len(results_list)}")
+        # Filter for USA shops and get original_price
+        listings = data.get("data", [])
+        print(f"  [PRICE] Total listings: {len(listings)}")
         
-        if results_list:
-            stats = results_list[0]
-            winelabs_price = stats.get("winelabs_price")
-            print(f"  [PRICE] winelabs_price: {winelabs_price}")
+        usa_prices = []
+        for listing in listings:
+            if listing.get("shop_country") == "USA":
+                price = listing.get("original_price")
+                if price is not None:
+                    try:
+                        usa_prices.append(float(price))
+                    except (ValueError, TypeError):
+                        pass
+        
+        print(f"  [PRICE] USA listings: {len(usa_prices)}")
+        
+        if usa_prices:
+            avg_price = sum(usa_prices) / len(usa_prices)
+            print(f"  [PRICE] Average USA price: ${avg_price:.2f}")
             
-            if winelabs_price is not None:
-                result["price"] = float(winelabs_price)
-                result["count"] = stats.get("count", 0)
-                result["source"] = "price_stats"
-                return result
+            result["price"] = avg_price
+            result["count"] = len(usa_prices)
+            result["source"] = "wine-location-details"
+            return result
+        else:
+            print(f"  [PRICE] No USA prices found")
     else:
         print(f"  [PRICE] API returned None")
     
@@ -669,22 +793,49 @@ def get_retail_price(query: str) -> dict:
 
 def process_wines(wines: List[Dict]) -> List[Dict]:
     """
-    Process extracted wines: lookup retail prices and calculate markups.
+    Process extracted wines: match to Wine Labs, lookup retail prices, and calculate markups.
+    
+    Flow for each wine:
+    1. Get search_query from Claude extraction
+    2. Call match_wine_to_lwin(search_query) to get wl_display_name
+    3. Call get_retail_price(wl_display_name) for pricing
+    4. Calculate markups
+    
     Handles by-the-glass wines with bottle price estimation.
     """
     results = []
     
-    for wine in wines:
-        # Build query from wine name
+    for i, wine in enumerate(wines, 1):
         name = wine.get("name", "")
         vintage = wine.get("vintage")
-        if vintage:
-            query = f"{name} {vintage}"
-        else:
-            query = name
         
-        # Use Claude's extracted name as display name
-        display_name = name
+        # Use Claude's optimized search_query, fallback to name + vintage
+        search_query = wine.get("search_query")
+        if not search_query:
+            search_query = f"{name} {vintage}" if vintage else name
+        
+        print(f"\n[WINE {i}] {name}")
+        print(f"  Search query: {search_query}")
+        
+        # Step 1: Match to Wine Labs
+        match_data = match_wine_to_lwin(search_query)
+        wl_display_name = match_data["wl_display_name"]
+        wine_id = match_data["wine_id"]
+        lwin = match_data["lwin"]
+        was_matched = match_data["matched"]
+        
+        # Step 2: Get retail price using Wine Labs wine_id
+        retail_price = None
+        listings_count = 0
+        price_source = None
+        
+        if wine_id:
+            price_data = get_retail_price(wine_id)
+            retail_price = price_data["price"]
+            listings_count = price_data["count"]
+            price_source = price_data["source"]
+        else:
+            print(f"  [SKIP PRICE] No wine_id found, skipping price lookup")
         
         # Get menu price (original price from menu)
         original_menu_price = wine.get("price")
@@ -693,12 +844,6 @@ def process_wines(wines: List[Dict]) -> List[Dict]:
                 original_menu_price = float(original_menu_price)
             except (ValueError, TypeError):
                 original_menu_price = None
-        
-        # Get retail price by searching with wine name
-        price_data = get_retail_price(query)
-        retail_price = price_data["price"]
-        listings_count = price_data["count"]
-        price_source = price_data["source"]
         
         # Detect if wine is by the glass
         is_glass = wine.get("is_glass", False)
@@ -713,12 +858,12 @@ def process_wines(wines: List[Dict]) -> List[Dict]:
                 if original_menu_price < retail_price * 0.6:
                     is_glass = True
                     auto_detected_glass = True
-                    print(f"  Auto-detected glass pour: {display_name} @ ${original_menu_price} (retail: ${retail_price:.2f})")
+                    print(f"  Auto-detected glass pour: {name} @ ${original_menu_price} (retail: ${retail_price:.2f})")
             # Heuristic 2: Price is suspiciously low for any wine (under $20)
             elif original_menu_price < 20:
                 is_glass = True
                 auto_detected_glass = True
-                print(f"  Auto-detected glass pour (low price): {display_name} @ ${original_menu_price}")
+                print(f"  Auto-detected glass pour (low price): {name} @ ${original_menu_price}")
         
         # Calculate estimated bottle price and menu price for markup calculation
         if is_glass and original_menu_price is not None:
@@ -739,8 +884,11 @@ def process_wines(wines: List[Dict]) -> List[Dict]:
             markup_percent = None
         
         results.append({
+            "wine_name": name,  # Claude's extracted name (for display)
+            "matched_wine_name": wl_display_name,  # Wine Labs canonical name
+            "lwin": lwin,
             "original_name": wine.get("name", "Unknown"),
-            "display_name": display_name,
+            "display_name": name,
             "vintage": wine.get("vintage"),
             "menu_price": menu_price,  # Estimated bottle price if glass pour
             "glass_price": glass_price,  # Original glass price (None if bottle)
@@ -752,7 +900,7 @@ def process_wines(wines: List[Dict]) -> List[Dict]:
             "price_source": price_source,
             "markup_dollars": markup_dollars,
             "markup_percent": markup_percent,
-            "matched": retail_price is not None
+            "matched": was_matched and retail_price is not None
         })
     
     return results
@@ -1246,6 +1394,11 @@ SHARE_PAGE_HTML = '''
         .results-table tbody tr:last-child td { border-bottom: none; }
         .results-table tbody tr:hover { background: rgba(0, 212, 255, 0.05); }
         .wine-name { font-weight: 500; }
+        .matched-wine { font-size: 0.9rem; color: var(--text-secondary); max-width: 250px; }
+        .matched-wine-text { color: var(--accent-cyan); font-weight: 400; }
+        .no-match { color: var(--text-muted); font-style: italic; opacity: 0.6; }
+        .mobile-matched { display: none; font-size: 0.8rem; color: var(--accent-cyan); margin-top: 4px; padding-top: 4px; border-top: 1px dashed rgba(0, 212, 255, 0.2); font-style: italic; }
+        .mobile-matched.no-match { color: var(--text-muted); opacity: 0.6; }
         .price { font-family: 'Share Tech Mono', monospace; }
         .price-menu { color: var(--accent-pink); text-shadow: 0 0 8px var(--accent-pink-glow); }
         .price-retail { color: var(--accent-green); }
@@ -1462,6 +1615,9 @@ SHARE_PAGE_HTML = '''
                 color: var(--accent-cyan);
                 margin-top: 4px;
             }
+            .mobile-matched {
+                display: block;
+            }
             .results-table td.price,
             .results-table td.markup-cell {
                 display: inline-flex;
@@ -1523,7 +1679,8 @@ SHARE_PAGE_HTML = '''
             <table class="results-table">
                 <thead>
                     <tr>
-                        <th>Wine</th>
+                        <th>Menu Wine</th>
+                        <th class="hide-mobile">Matched Wine</th>
                         <th class="hide-mobile">Vintage</th>
                         <th>Menu</th>
                         <th>Retail</th>
@@ -1618,10 +1775,17 @@ SHARE_PAGE_HTML = '''
         const tbody = document.getElementById('results-body');
         sortedWines.forEach(wine => {
             const row = document.createElement('tr');
-            const displayName = wine.display_name || wine.original_name;
+            const displayName = wine.wine_name || wine.display_name || wine.original_name;
+            const matchedWineName = wine.matched_wine_name 
+                ? `<span class="matched-wine-text">${wine.matched_wine_name}</span>`
+                : '<span class="no-match">No match</span>';
+            const mobileMatchedHtml = wine.matched_wine_name 
+                ? `<span class="mobile-matched">→ ${wine.matched_wine_name}</span>` 
+                : '<span class="mobile-matched no-match">→ No match</span>';
             const vintageDisplay = wine.vintage || '';
             row.innerHTML = `
-                <td class="wine-name" data-label="Wine">${displayName}${vintageDisplay ? `<span class="mobile-vintage">${vintageDisplay}</span>` : ''}</td>
+                <td class="wine-name" data-label="Menu Wine">${displayName}${vintageDisplay ? `<span class="mobile-vintage">${vintageDisplay}</span>` : ''}${mobileMatchedHtml}</td>
+                <td class="matched-wine hide-mobile">${matchedWineName}</td>
                 <td class="hide-mobile">${wine.vintage || '—'}</td>
                 <td class="price price-menu" data-label="Menu">${formatPrice(wine.menu_price)}</td>
                 <td class="price price-retail" data-label="Retail">${formatPrice(wine.retail_price)}</td>

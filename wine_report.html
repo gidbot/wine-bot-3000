@@ -553,6 +553,136 @@
             border-bottom: none;
         }
 
+        /* Wine Lookup Progress */
+        .wine-lookup-progress {
+            display: none;
+            text-align: left;
+            background: var(--glass-bg);
+            backdrop-filter: blur(var(--glass-blur));
+            -webkit-backdrop-filter: blur(var(--glass-blur));
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            padding: 16px;
+            margin-top: 20px;
+            max-height: 280px;
+            overflow-y: auto;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        .wine-lookup-progress.visible {
+            display: block;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .lookup-progress-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid rgba(0, 212, 255, 0.2);
+        }
+
+        .lookup-progress-title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: var(--accent-cyan);
+            text-shadow: 0 0 8px var(--accent-cyan-glow);
+        }
+
+        .lookup-progress-count {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.85rem;
+            color: var(--accent-pink);
+            text-shadow: 0 0 6px rgba(255, 0, 127, 0.5);
+        }
+
+        .lookup-current-wine {
+            background: rgba(0, 212, 255, 0.1);
+            border: 1px solid rgba(0, 212, 255, 0.3);
+            border-radius: 8px;
+            padding: 10px 12px;
+            margin-bottom: 12px;
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.85rem;
+            color: var(--text-primary);
+            animation: pulse 1.5s ease infinite;
+        }
+
+        .lookup-current-wine .current-label {
+            font-size: 0.65rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--accent-cyan);
+            display: block;
+            margin-bottom: 4px;
+        }
+
+        .lookup-results {
+            max-height: 150px;
+            overflow-y: auto;
+        }
+
+        .lookup-result-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 0;
+            border-bottom: 1px solid rgba(0, 212, 255, 0.1);
+            font-size: 0.8rem;
+            animation: slideIn 0.3s ease forwards;
+        }
+
+        .lookup-result-item:last-child {
+            border-bottom: none;
+        }
+
+        .lookup-result-wine {
+            color: var(--text-secondary);
+            flex: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-right: 10px;
+        }
+
+        .lookup-result-status {
+            font-family: 'Share Tech Mono', monospace;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .lookup-result-status.found {
+            color: #00ff88;
+        }
+
+        .lookup-result-status.not-found {
+            color: #ff6b6b;
+        }
+
+        .lookup-result-matched {
+            display: block;
+            font-size: 0.75rem;
+            color: var(--accent-cyan);
+            opacity: 0.8;
+            margin-top: 2px;
+        }
+
+        .waiting-detail {
+            display: block;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-top: 4px;
+            animation: pulse 1.5s ease infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
         .wine-discovery-item .wine-vintage {
             color: var(--text-muted);
             font-size: 0.8rem;
@@ -687,6 +817,40 @@
         }
 
         .wine-unmatched {
+            opacity: 0.6;
+        }
+
+        /* Matched Wine Column */
+        .matched-wine {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            max-width: 250px;
+        }
+
+        .matched-wine-text {
+            color: var(--accent-cyan);
+            font-weight: 400;
+        }
+
+        .no-match {
+            color: var(--text-muted);
+            font-style: italic;
+            opacity: 0.6;
+        }
+
+        /* Mobile matched wine display */
+        .mobile-matched {
+            display: none;
+            font-size: 0.8rem;
+            color: var(--accent-cyan);
+            margin-top: 4px;
+            padding-top: 4px;
+            border-top: 1px dashed rgba(0, 212, 255, 0.2);
+            font-style: italic;
+        }
+
+        .mobile-matched.no-match {
+            color: var(--text-muted);
             opacity: 0.6;
         }
 
@@ -1530,6 +1694,11 @@
                 margin-top: 4px;
             }
 
+            /* Show matched wine on mobile */
+            .mobile-matched {
+                display: block;
+            }
+
             /* Price cells in a row */
             .results-table td.price,
             .results-table td.markup-cell {
@@ -1761,6 +1930,7 @@
             .preview-card,
             .results-card,
             .wine-discovery,
+            .wine-lookup-progress,
             .error-message,
             .modal-content,
             .share-toast {
@@ -1786,11 +1956,26 @@
             <div class="loading-text" id="loading-text">Scanning menu...</div>
             <div class="loading-subtext" id="loading-status">AI is reading your wine list</div>
             
+            <!-- Wine extraction discovery list -->
             <div class="wine-discovery" id="wine-discovery">
-                <div class="wine-discovery-title">🍷🤖 Wines Found</div>
+                <div class="wine-discovery-title">Wines Found</div>
                 <ul class="wine-discovery-list" id="wine-discovery-list">
                     <!-- Wines will be added here dynamically -->
                 </ul>
+            </div>
+            
+            <!-- Price lookup progress -->
+            <div class="wine-lookup-progress" id="wine-lookup-progress">
+                <div class="lookup-progress-header">
+                    <span class="lookup-progress-title">Looking up prices</span>
+                    <span class="lookup-progress-count" id="lookup-progress-count">0 / 0</span>
+                </div>
+                <div class="lookup-current-wine" id="lookup-current-wine">
+                    <!-- Current wine being looked up -->
+                </div>
+                <div class="lookup-results" id="lookup-results">
+                    <!-- Results will appear here -->
+                </div>
             </div>
         </div>
     </div>
@@ -1940,19 +2125,20 @@
                     <table class="results-table">
                 <thead>
                     <tr>
-                        <th>Wine</th>
-                                <th class="hide-mobile">Vintage</th>
-                                <th class="sortable" data-sort="menu_price">
-                                    Menu
-                                    <span class="sort-icon"></span>
-                                </th>
-                                <th>Retail</th>
-                                <th class="sortable active asc" data-sort="markup_percent">
-                                    Markup
-                                    <span class="sort-icon">▲</span>
-                                </th>
-                            </tr>
-                        </thead>
+                        <th>Menu Wine</th>
+                        <th class="hide-mobile">Matched Wine</th>
+                        <th class="hide-mobile">Vintage</th>
+                        <th class="sortable" data-sort="menu_price">
+                            Menu
+                            <span class="sort-icon"></span>
+                        </th>
+                        <th>Retail</th>
+                        <th class="sortable active asc" data-sort="markup_percent">
+                            Markup
+                            <span class="sort-icon">▲</span>
+                        </th>
+                    </tr>
+                </thead>
                         <tbody id="results-body">
                             <!-- Results will be inserted here -->
                         </tbody>
@@ -2060,6 +2246,12 @@
         const loadingText = document.getElementById('loading-text');
         const wineDiscovery = document.getElementById('wine-discovery');
         const wineDiscoveryList = document.getElementById('wine-discovery-list');
+        
+        // Wine Lookup Progress Elements
+        const wineLookupProgress = document.getElementById('wine-lookup-progress');
+        const lookupProgressCount = document.getElementById('lookup-progress-count');
+        const lookupCurrentWine = document.getElementById('lookup-current-wine');
+        const lookupResults = document.getElementById('lookup-results');
         const errorDiv = document.getElementById('error');
         const errorIcon = document.getElementById('error-icon');
         const errorTitle = document.getElementById('error-title');
@@ -2281,16 +2473,110 @@
                 if (i === step - 1) el.classList.add('active');
             });
             
-            // Hide wine discovery initially
+            // Hide panels based on step
             if (step === 1) {
                 wineDiscovery.classList.remove('visible');
                 wineDiscoveryList.innerHTML = '';
+                wineLookupProgress.classList.remove('visible');
+                lookupResults.innerHTML = '';
             }
+        }
+        
+        // Wine lookup progress functions
+        let lookupProgressInterval = null;
+        let currentLookupIndex = 0;
+        let lookupWinesList = [];
+        let lookupStartTime = null;
+        
+        function startLookupProgress(wines) {
+            lookupWinesList = wines;
+            currentLookupIndex = 0;
+            lookupResults.innerHTML = '';
+            lookupProgressCount.textContent = `0 / ${wines.length}`;
+            lookupStartTime = Date.now();
+            
+            // Show current wine being looked up
+            updateCurrentLookupWine();
+            
+            wineLookupProgress.classList.add('visible');
+            wineDiscovery.classList.remove('visible');
+            
+            // Start cycling through wines with timing info
+            lookupProgressInterval = setInterval(() => {
+                if (currentLookupIndex < lookupWinesList.length - 1) {
+                    // Move to next wine
+                    currentLookupIndex++;
+                    updateCurrentLookupWine();
+                } else {
+                    // All wines shown, update to show waiting status
+                    updateWaitingStatus();
+                }
+            }, 800); // Update every 800ms
+        }
+        
+        function updateCurrentLookupWine() {
+            const wine = lookupWinesList[currentLookupIndex];
+            lookupProgressCount.textContent = `${currentLookupIndex + 1} / ${lookupWinesList.length}`;
+            lookupCurrentWine.innerHTML = `
+                <span class="current-label">Matching wine ${currentLookupIndex + 1} of ${lookupWinesList.length}:</span>
+                ${wine.name || wine.wine_name}${wine.vintage ? ' ' + wine.vintage : ''}
+            `;
+        }
+        
+        function updateWaitingStatus() {
+            const elapsed = Math.floor((Date.now() - lookupStartTime) / 1000);
+            lookupCurrentWine.innerHTML = `
+                <span class="current-label">Waiting for Wine Labs API...</span>
+                <span class="waiting-detail">Fetching prices from database (${elapsed}s)</span>
+            `;
+        }
+        
+        function finishLookupProgress(results) {
+            // Stop the interval
+            if (lookupProgressInterval) {
+                clearInterval(lookupProgressInterval);
+                lookupProgressInterval = null;
+            }
+            
+            // Clear the "currently looking up" display
+            lookupCurrentWine.innerHTML = '';
+            
+            // Show final results
+            lookupProgressCount.textContent = `${results.length} / ${results.length}`;
+            
+            // Display all results with match status
+            lookupResults.innerHTML = results.map(wine => {
+                const menuName = wine.wine_name || wine.name || 'Unknown';
+                const matchedName = wine.matched_wine_name;
+                const hasPrice = wine.retail_price !== null && wine.retail_price !== undefined;
+                const statusClass = hasPrice ? 'found' : 'not-found';
+                const statusText = hasPrice ? `$${wine.retail_price.toFixed(0)}` : 'No match';
+                
+                // Show matched wine name if found
+                const matchLine = matchedName 
+                    ? `<span class="lookup-result-matched">→ ${matchedName}</span>` 
+                    : '';
+                
+                return `
+                    <div class="lookup-result-item">
+                        <span class="lookup-result-wine">${menuName}${matchLine}</span>
+                        <span class="lookup-result-status ${statusClass}">${statusText}</span>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        function stopLookupProgress() {
+            if (lookupProgressInterval) {
+                clearInterval(lookupProgressInterval);
+                lookupProgressInterval = null;
+            }
+            wineLookupProgress.classList.remove('visible');
         }
 
         function showDiscoveredWines(wines) {
             // Update to step 2
-            showLoading(2, '🍷🤖 Found ' + wines.length + ' wines!', 'Looking up prices...');
+            showLoading(2, 'Found ' + wines.length + ' wines!', 'Looking up prices...');
             
             // Build wine list HTML
             wineDiscoveryList.innerHTML = wines.map(wine => {
@@ -2306,6 +2592,7 @@
         function hideLoading() {
             loading.classList.remove('active');
             wineDiscovery.classList.remove('visible');
+            stopLookupProgress();
         }
 
         // Wine Selection Modal Functions
@@ -2606,16 +2893,21 @@
                     // Show success toast
                     showShareToast();
                     shareBtnText.textContent = 'Link Copied!';
+                    
+                    // Redirect to share page after brief delay
+                    setTimeout(() => {
+                        window.location.href = shareUrl;
+                    }, 1000);
                 } else {
-                    // Fallback: show manual copy modal
+                    // Fallback: show manual copy modal, then redirect
                     showManualCopyModal(shareUrl);
                     shareBtnText.textContent = 'Link Ready!';
+                    
+                    // Still redirect after a bit longer for manual copy
+                    setTimeout(() => {
+                        window.location.href = shareUrl;
+                    }, 2000);
                 }
-                
-                setTimeout(() => {
-                    shareBtnText.textContent = 'Share Results';
-                    shareBtn.disabled = false;
-                }, 2000);
                 
             } catch (error) {
                 console.error('Share error:', error);
@@ -2786,7 +3078,7 @@
             hideNoWinesFound();
 
             hideError();
-            showLoading(1, '🍷🤖 Scanning menu...', 'AI is reading your wine list');
+            showLoading(1, 'Scanning menu...', 'AI is reading your wine list');
 
             try {
                 // Safely extract media type and image data
@@ -2902,9 +3194,12 @@
                 return;
             }
             
-            // Hide modal and show loading
+            // Hide modal and show loading with progress
             hideWineSelectionModal();
-            showLoading(2, '🍷🤖 Found ' + selectedWines.length + ' wines!', 'Looking up prices...');
+            showLoading(2, 'Looking up ' + selectedWines.length + ' wines...', 'Searching Wine Labs database');
+            
+            // Start the progress display
+            startLookupProgress(selectedWines);
             
             try {
                 // Create AbortController for timeout
@@ -2957,9 +3252,18 @@
                     };
                 }
                 
+                // Show lookup results in progress panel
+                if (data.wines && data.wines.length > 0) {
+                    // Update status to show we got results
+                    loadingStatus.textContent = 'Got results! Processing...';
+                    finishLookupProgress(data.wines);
+                    // Give user a moment to see the results
+                    await new Promise(resolve => setTimeout(resolve, 1500));
+                }
+                
                 // Update to step 3
-                showLoading(3, '🍷🤖 Almost done!', 'Calculating markups...');
-                await new Promise(resolve => setTimeout(resolve, 500));
+                showLoading(3, 'Building results...', 'Calculating markups and sorting');
+                await new Promise(resolve => setTimeout(resolve, 300));
 
                 // Display results
                 displayResults(data);
@@ -2989,15 +3293,26 @@
                 row.dataset.index = index;
                 
                 const nameClass = wine.matched ? 'wine-name' : 'wine-name wine-unmatched';
-                const displayName = wine.matched ? wine.display_name : wine.original_name;
+                const displayName = wine.wine_name || wine.display_name || wine.original_name;
                 const hasListings = wine.listings && wine.listings.length > 0;
                 const expandIcon = hasListings ? '<span class="expand-icon">▶</span>' : '<span class="expand-icon" style="visibility:hidden">▶</span>';
                 
                 const glassClass = wine.is_glass ? ' is-glass' : '';
                 const vintageDisplay = wine.vintage || '';
                 
+                // Format matched wine name - show matched name or "No match" indicator
+                const matchedWineName = wine.matched_wine_name 
+                    ? `<span class="matched-wine-text">${wine.matched_wine_name}</span>`
+                    : '<span class="no-match">No match</span>';
+                
+                // For mobile: show matched wine below menu wine if matched
+                const mobileMatchedHtml = wine.matched_wine_name 
+                    ? `<span class="mobile-matched">→ ${wine.matched_wine_name}</span>` 
+                    : '<span class="mobile-matched no-match">→ No match</span>';
+                
                 row.innerHTML = `
-                    <td class="${nameClass}" data-label="Wine">${expandIcon}${displayName}${vintageDisplay ? `<span class="mobile-vintage">${vintageDisplay}</span>` : ''}</td>
+                    <td class="${nameClass}" data-label="Menu Wine">${expandIcon}${displayName}${vintageDisplay ? `<span class="mobile-vintage">${vintageDisplay}</span>` : ''}${mobileMatchedHtml}</td>
+                    <td class="matched-wine hide-mobile" data-label="Matched">${matchedWineName}</td>
                     <td class="wine-vintage hide-mobile">${wine.vintage || '<span class="na">—</span>'}</td>
                     <td class="price price-menu${glassClass}" data-label="Menu">${formatMenuPrice(wine)}</td>
                     <td class="price price-retail" data-label="Retail">${formatPrice(wine.retail_price)}${formatSourceBadge(wine.price_source)}</td>
@@ -3013,7 +3328,7 @@
                     detailRow.dataset.index = index;
                     
                     let listingsHtml = `
-                        <td colspan="5">
+                        <td colspan="6">
                             <div class="listings-detail-content">
                                 <table class="listings-detail-table">
                                     <thead>
