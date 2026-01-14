@@ -700,13 +700,17 @@ def match_wine_to_lwin(search_query: str) -> dict:
     return result
 
 
-def get_retail_price(wine_id: str) -> dict:
+def get_retail_price(wine_id: str, vintage: str = None) -> dict:
     """
     Get retail price using Wine Labs wine-location-details endpoint.
     Filters for USA shops and calculates average of original_price.
     
+    If vintage is provided, first tries to match wines with that vintage.
+    If no vintage matches found, falls back to average of all USA listings.
+    
     Args:
         wine_id: The Wine Labs wine ID from search_wines
+        vintage: Optional vintage year to filter by (e.g., "2022")
     
     Returns dict with: price, count, source
     """
@@ -730,7 +734,7 @@ def get_retail_price(wine_id: str) -> dict:
         f"&offset=0"
     )
     
-    print(f"  [PRICE] Looking up wine ID: {wine_id}")
+    print(f"  [PRICE] Looking up wine ID: {wine_id}" + (f" (vintage: {vintage})" if vintage else ""))
     
     # Use cache key based on wine_id
     cache_key = f"wine-location-details:{wine_id}"
@@ -759,32 +763,64 @@ def get_retail_price(wine_id: str) -> dict:
             return result
     
     if data:
-        # Filter for USA shops and get original_price
+        # Get all listings
         listings = data.get("data", [])
         print(f"  [PRICE] Total listings: {len(listings)}")
         
-        usa_prices = []
-        for listing in listings:
-            if listing.get("shop_country") == "USA":
-                price = listing.get("original_price")
-                if price is not None:
-                    try:
-                        usa_prices.append(float(price))
-                    except (ValueError, TypeError):
-                        pass
+        # Filter for USA shops first
+        usa_listings = [l for l in listings if l.get("shop_country") == "USA"]
+        print(f"  [PRICE] USA listings: {len(usa_listings)}")
         
-        print(f"  [PRICE] USA listings: {len(usa_prices)}")
+        if not usa_listings:
+            print(f"  [PRICE] No USA listings found")
+            return result
         
-        if usa_prices:
-            avg_price = sum(usa_prices) / len(usa_prices)
-            print(f"  [PRICE] Average USA price: ${avg_price:.2f}")
+        # If vintage provided, try to filter by vintage first
+        if vintage:
+            vintage_prices = []
+            for listing in usa_listings:
+                # Vintage is in "offer_vintage" field
+                listing_vintage = listing.get("offer_vintage")
+                if listing_vintage and str(listing_vintage) == str(vintage):
+                    price = listing.get("original_price")
+                    if price is not None:
+                        try:
+                            vintage_prices.append(float(price))
+                        except (ValueError, TypeError):
+                            pass
+            
+            if vintage_prices:
+                avg_price = sum(vintage_prices) / len(vintage_prices)
+                print(f"  [PRICE] Found {len(vintage_prices)} USA listings with vintage {vintage}")
+                print(f"  [PRICE] Average USA price (vintage {vintage}): ${avg_price:.2f}")
+                
+                result["price"] = avg_price
+                result["count"] = len(vintage_prices)
+                result["source"] = f"wine-location-details (vintage {vintage})"
+                return result
+            else:
+                print(f"  [PRICE] No USA listings with vintage {vintage}, falling back to all vintages")
+        
+        # Fall back to all USA listings (no vintage filter or no vintage matches)
+        all_usa_prices = []
+        for listing in usa_listings:
+            price = listing.get("original_price")
+            if price is not None:
+                try:
+                    all_usa_prices.append(float(price))
+                except (ValueError, TypeError):
+                    pass
+        
+        if all_usa_prices:
+            avg_price = sum(all_usa_prices) / len(all_usa_prices)
+            print(f"  [PRICE] Average USA price (all vintages): ${avg_price:.2f}")
             
             result["price"] = avg_price
-            result["count"] = len(usa_prices)
-            result["source"] = "wine-location-details"
+            result["count"] = len(all_usa_prices)
+            result["source"] = "wine-location-details (all vintages)"
             return result
         else:
-            print(f"  [PRICE] No USA prices found")
+            print(f"  [PRICE] No valid USA prices found")
     else:
         print(f"  [PRICE] API returned None")
     
@@ -830,7 +866,8 @@ def process_wines(wines: List[Dict]) -> List[Dict]:
         price_source = None
         
         if wine_id:
-            price_data = get_retail_price(wine_id)
+            # Pass vintage to filter prices by year if available
+            price_data = get_retail_price(wine_id, vintage)
             retail_price = price_data["price"]
             listings_count = price_data["count"]
             price_source = price_data["source"]

@@ -2516,18 +2516,20 @@
         
         function updateCurrentLookupWine() {
             const wine = lookupWinesList[currentLookupIndex];
+            const wineName = wine.name || wine.wine_name;
+            const vintageStr = wine.vintage ? ` ${wine.vintage}` : '';
             lookupProgressCount.textContent = `${currentLookupIndex + 1} / ${lookupWinesList.length}`;
             lookupCurrentWine.innerHTML = `
-                <span class="current-label">Matching wine ${currentLookupIndex + 1} of ${lookupWinesList.length}:</span>
-                ${wine.name || wine.wine_name}${wine.vintage ? ' ' + wine.vintage : ''}
+                <span class="current-label">Fetching price ${currentLookupIndex + 1} of ${lookupWinesList.length}:</span>
+                ${wineName}${vintageStr}
             `;
         }
         
         function updateWaitingStatus() {
             const elapsed = Math.floor((Date.now() - lookupStartTime) / 1000);
             lookupCurrentWine.innerHTML = `
-                <span class="current-label">Waiting for Wine Labs API...</span>
-                <span class="waiting-detail">Fetching prices from database (${elapsed}s)</span>
+                <span class="current-label">Processing results...</span>
+                <span class="waiting-detail">Fetching prices (${elapsed}s)</span>
             `;
         }
         
@@ -2576,7 +2578,7 @@
 
         function showDiscoveredWines(wines) {
             // Update to step 2
-            showLoading(2, 'Found ' + wines.length + ' wines!', 'Looking up prices...');
+            showLoading(2, 'Found ' + wines.length + ' wines!', 'Fetching retail prices...');
             
             // Build wine list HTML
             wineDiscoveryList.innerHTML = wines.map(wine => {
@@ -3196,7 +3198,7 @@
             
             // Hide modal and show loading with progress
             hideWineSelectionModal();
-            showLoading(2, 'Looking up ' + selectedWines.length + ' wines...', 'Searching Wine Labs database');
+            showLoading(2, 'Fetching prices for ' + selectedWines.length + ' wines...', 'Looking up retail prices');
             
             // Start the progress display
             startLookupProgress(selectedWines);
