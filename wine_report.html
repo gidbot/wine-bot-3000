@@ -338,62 +338,6 @@
             gap: 12px;
         }
 
-        /* Context Input */
-        .context-input-section {
-            width: 100%;
-            margin-bottom: 16px;
-        }
-
-        .context-label {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            font-size: 0.85rem;
-            color: var(--text-secondary);
-            margin-bottom: 8px;
-        }
-
-        .context-label svg {
-            opacity: 0.7;
-        }
-
-        .optional-tag {
-            color: var(--text-muted);
-            font-weight: 400;
-        }
-
-        .context-textarea {
-            width: 100%;
-            padding: 12px 14px;
-            background: rgba(0, 0, 0, 0.3);
-            border: 1px solid var(--border-subtle);
-            border-radius: 10px;
-            color: var(--text-primary);
-            font-family: inherit;
-            font-size: 0.9rem;
-            resize: vertical;
-            min-height: 60px;
-            max-height: 150px;
-            transition: border-color 0.2s, box-shadow 0.2s;
-        }
-
-        .context-textarea:focus {
-            outline: none;
-            border-color: var(--accent-gold);
-            box-shadow: 0 0 0 3px rgba(201, 162, 39, 0.1);
-        }
-
-        .context-textarea::placeholder {
-            color: var(--text-muted);
-            font-size: 0.85rem;
-        }
-
-        .context-hint {
-            font-size: 0.75rem;
-            color: var(--text-muted);
-            margin-top: 6px;
-        }
-
         /* Loading State */
         .loading-overlay {
             display: none;
@@ -2061,25 +2005,6 @@
                     <div class="preview-size" id="preview-size">2.4 MB</div>
                 </div>
                 
-                <!-- Context Input -->
-                <div class="context-input-section">
-                    <label for="context-input" class="context-label">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
-                            <circle cx="12" cy="12" r="10"/>
-                            <line x1="12" y1="16" x2="12" y2="12"/>
-                            <line x1="12" y1="8" x2="12.01" y2="8"/>
-                        </svg>
-                        Additional Context <span class="optional-tag">(optional)</span>
-                    </label>
-                    <textarea 
-                        id="context-input" 
-                        class="context-textarea" 
-                        placeholder="Add any helpful info about this menu... e.g., 'This is a Sicilian wine list', 'The wines are from 2020-2022 vintages', 'Restaurant is in Italy'"
-                        rows="2"
-                    ></textarea>
-                    <div class="context-hint">This helps identify wines more accurately</div>
-                </div>
-                
                 <div class="preview-actions">
                     <button class="btn btn-primary" id="analyze-btn">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -3092,10 +3017,6 @@
                 
                 let response;
                 try {
-                    // Get user context if provided
-                    const contextInput = document.getElementById('context-input');
-                    const userContext = contextInput ? contextInput.value.trim() : '';
-                    
                     // Step 1: Extract wines only (no price lookup)
                     response = await fetch('/extract', {
                         method: 'POST',
@@ -3104,8 +3025,7 @@
                         },
                         body: JSON.stringify({
                             image: currentBase64,
-                            media_type: mediaType,
-                            context: userContext
+                            media_type: mediaType
                         }),
                         signal: controller.signal
                     });

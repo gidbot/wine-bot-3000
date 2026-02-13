@@ -387,14 +387,13 @@ analyses_store = AnalysesStore(ANALYSES_DB, IMAGES_DIR, ANALYSIS_EXPIRY_DAYS)
 # Claude Vision Integration
 # =============================================================================
 
-def analyze_menu_with_claude(image_base64: str, media_type: str = "image/jpeg", user_context: str = "") -> List[Dict]:
+def analyze_menu_with_claude(image_base64: str, media_type: str = "image/jpeg") -> List[Dict]:
     """
     Use Claude Vision to analyze a wine menu image and extract wine information.
     
     Args:
         image_base64: Base64-encoded image data
         media_type: MIME type of the image
-        user_context: Optional user-provided context about the menu
     
     Returns a list of dicts with keys: name, vintage, price
     Raises: TimeoutError, ConnectionError, or ValueError on failure
@@ -407,18 +406,7 @@ def analyze_menu_with_claude(image_base64: str, media_type: str = "image/jpeg", 
         timeout=CLAUDE_TIMEOUT
     )
     
-    # Build the prompt with optional user context
-    context_section = ""
-    if user_context:
-        context_section = f"""
-ADDITIONAL CONTEXT FROM USER:
-{user_context}
-
-Use this context to help identify wines more accurately. For example, if the user says it's a Sicilian wine list, prioritize Sicilian producers and appellations.
-
-"""
-    
-    prompt = context_section + """Analyze this wine menu image and extract all wines listed with their prices.
+    prompt = """Analyze this wine menu image and extract all wines listed with their prices.
 
 CRITICAL RULES:
 1. PRODUCER NAME ALWAYS COMES FIRST - this is essential for wine database matching
@@ -701,17 +689,12 @@ def match_wine_to_lwin(search_query: str) -> dict:
     return result
 
 
-def get_retail_price(wine_id: str, vintage: str = None) -> dict:
+def get_retail_price(search_query: str) -> dict:
     """
-    Get retail price using Wine Labs wine-location-details endpoint.
-    Filters for USA shops and calculates average of original_price.
-    
-    If vintage is provided, first tries to match wines with that vintage.
-    If no vintage matches found, falls back to average of all USA listings.
+    Get retail price using Wine Labs /price_stats endpoint.
     
     Args:
-        wine_id: The Wine Labs wine ID from search_wines
-        vintage: Optional vintage year to filter by (e.g., "2022")
+        search_query: The wine name/search query to look up
     
     Returns dict with: price, count, source
     """
@@ -721,107 +704,48 @@ def get_retail_price(wine_id: str, vintage: str = None) -> dict:
         "source": None
     }
     
-    if not wine_id:
+    if not search_query:
         return result
     
-    # Build URL with query parameters
-    url = (
-        f"https://winelabs.ai/api/wine-location-details"
-        f"?wineId={wine_id}"
-        f"&currency=USD"
-        f"&locationType=retail"
-        f"&userId={WINE_LABS_USER_ID}"
-        f"&limit=1000"
-        f"&offset=0"
-    )
+    # Strip vintage year from end of query if present (API works better without it)
+    query = re.sub(r'\s+\d{4}\s*$', '', search_query).strip()
     
-    print(f"  [PRICE] Looking up wine ID: {wine_id}" + (f" (vintage: {vintage})" if vintage else ""))
+    print(f"  [PRICE] Looking up: {query}")
     
-    # Use cache key based on wine_id
-    cache_key = f"wine-location-details:{wine_id}"
-    cached_response = cache.get(cache_key, {})
+    # Build payload for /price_stats endpoint
+    payload = {
+        "query": query,
+        "region": "North America",
+        "currency": "USD",
+        "user_id": WINE_LABS_USER_ID
+    }
     
-    if cached_response is not None:
-        print(f"[CACHED] {cache_key}")
-        data = cached_response
-    else:
-        print(f"[API CALL] wine-location-details for {wine_id}")
-        try:
-            response = requests.get(url, verify=False, timeout=WINE_LABS_TIMEOUT)
-            if response.status_code != 200:
-                print(f"  Wine Labs API error: {response.status_code}")
-                return result
-            data = response.json()
-            cache.set(cache_key, {}, data)
-        except requests.exceptions.Timeout:
-            print(f"  Wine Labs API timeout")
-            return result
-        except requests.exceptions.ConnectionError:
-            print(f"  Wine Labs API connection error")
-            return result
-        except Exception as e:
-            print(f"  Wine Labs API error: {e}")
-            return result
+    # Use cached_post for caching
+    data = cached_post("/price_stats", payload, cache_empty_results=False)
     
     if data:
-        # Get all listings
-        listings = data.get("data", [])
-        print(f"  [PRICE] Total listings: {len(listings)}")
+        results = data.get("results", [])
+        print(f"  [PRICE] Results count: {len(results)}")
         
-        # Filter for USA shops first
-        usa_listings = [l for l in listings if l.get("shop_country") == "USA"]
-        print(f"  [PRICE] USA listings: {len(usa_listings)}")
-        
-        if not usa_listings:
-            print(f"  [PRICE] No USA listings found")
-            return result
-        
-        # If vintage provided, try to filter by vintage first
-        if vintage:
-            vintage_prices = []
-            for listing in usa_listings:
-                # Vintage is in "offer_vintage" field
-                listing_vintage = listing.get("offer_vintage")
-                if listing_vintage and str(listing_vintage) == str(vintage):
-                    price = listing.get("original_price")
-                    if price is not None:
-                        try:
-                            vintage_prices.append(float(price))
-                        except (ValueError, TypeError):
-                            pass
+        if results:
+            first_result = results[0]
+            winelabs_price = first_result.get("winelabs_price")
             
-            if vintage_prices:
-                avg_price = sum(vintage_prices) / len(vintage_prices)
-                print(f"  [PRICE] Found {len(vintage_prices)} USA listings with vintage {vintage}")
-                print(f"  [PRICE] Average USA price (vintage {vintage}): ${avg_price:.2f}")
-                
-                result["price"] = avg_price
-                result["count"] = len(vintage_prices)
-                result["source"] = f"wine-location-details (vintage {vintage})"
-                return result
-            else:
-                print(f"  [PRICE] No USA listings with vintage {vintage}, falling back to all vintages")
-        
-        # Fall back to all USA listings (no vintage filter or no vintage matches)
-        all_usa_prices = []
-        for listing in usa_listings:
-            price = listing.get("original_price")
-            if price is not None:
+            if winelabs_price is not None:
                 try:
-                    all_usa_prices.append(float(price))
+                    price = float(winelabs_price)
+                    print(f"  [PRICE] Wine Labs price: ${price:.2f}")
+                    
+                    result["price"] = price
+                    result["count"] = first_result.get("count", 1)
+                    result["source"] = "price_stats"
+                    return result
                 except (ValueError, TypeError):
-                    pass
-        
-        if all_usa_prices:
-            avg_price = sum(all_usa_prices) / len(all_usa_prices)
-            print(f"  [PRICE] Average USA price (all vintages): ${avg_price:.2f}")
-            
-            result["price"] = avg_price
-            result["count"] = len(all_usa_prices)
-            result["source"] = "wine-location-details (all vintages)"
-            return result
+                    print(f"  [PRICE] Invalid price value: {winelabs_price}")
+            else:
+                print(f"  [PRICE] No winelabs_price in response")
         else:
-            print(f"  [PRICE] No valid USA prices found")
+            print(f"  [PRICE] No results found")
     else:
         print(f"  [PRICE] API returned None")
     
@@ -830,13 +754,12 @@ def get_retail_price(wine_id: str, vintage: str = None) -> dict:
 
 def process_wines(wines: List[Dict]) -> List[Dict]:
     """
-    Process extracted wines: match to Wine Labs, lookup retail prices, and calculate markups.
+    Process extracted wines: lookup retail prices via /price_stats and calculate markups.
     
     Flow for each wine:
     1. Get search_query from Claude extraction
-    2. Call match_wine_to_lwin(search_query) to get wl_display_name
-    3. Call get_retail_price(wl_display_name) for pricing
-    4. Calculate markups
+    2. Call get_retail_price(search_query) to get pricing from /price_stats
+    3. Calculate markups
     
     Handles by-the-glass wines with bottle price estimation.
     """
@@ -854,26 +777,18 @@ def process_wines(wines: List[Dict]) -> List[Dict]:
         print(f"\n[WINE {i}] {name}")
         print(f"  Search query: {search_query}")
         
-        # Step 1: Match to Wine Labs
-        match_data = match_wine_to_lwin(search_query)
-        wl_display_name = match_data["wl_display_name"]
-        wine_id = match_data["wine_id"]
-        lwin = match_data["lwin"]
-        was_matched = match_data["matched"]
-        
-        # Step 2: Get retail price using Wine Labs wine_id
+        # Get retail price using Wine Labs /price_stats endpoint
         retail_price = None
         listings_count = 0
         price_source = None
         
-        if wine_id:
-            # Pass vintage to filter prices by year if available
-            price_data = get_retail_price(wine_id, vintage)
+        if search_query:
+            price_data = get_retail_price(search_query)
             retail_price = price_data["price"]
             listings_count = price_data["count"]
             price_source = price_data["source"]
         else:
-            print(f"  [SKIP PRICE] No wine_id found, skipping price lookup")
+            print(f"  [SKIP PRICE] No search query, skipping price lookup")
         
         # Get menu price (original price from menu)
         original_menu_price = wine.get("price")
@@ -923,8 +838,8 @@ def process_wines(wines: List[Dict]) -> List[Dict]:
         
         results.append({
             "wine_name": name,  # Claude's extracted name (for display)
-            "matched_wine_name": wl_display_name,  # Wine Labs canonical name
-            "lwin": lwin,
+            "matched_wine_name": name if retail_price else None,  # Show name if we found a price
+            "lwin": None,  # No longer using LWIN matching
             "original_name": wine.get("name", "Unknown"),
             "display_name": name,
             "vintage": wine.get("vintage"),
@@ -938,7 +853,7 @@ def process_wines(wines: List[Dict]) -> List[Dict]:
             "price_source": price_source,
             "markup_dollars": markup_dollars,
             "markup_percent": markup_percent,
-            "matched": was_matched and retail_price is not None
+            "matched": retail_price is not None  # Matched if we found a price
         })
     
     return results
@@ -966,7 +881,6 @@ def extract():
     Expects JSON with:
     - image: base64-encoded image data
     - media_type: MIME type (e.g., "image/jpeg", "image/png")
-    - context: (optional) user-provided context about the menu
     
     Returns JSON with extracted wine data (no prices yet).
     """
@@ -978,7 +892,6 @@ def extract():
         
         image_base64 = data.get("image")
         media_type = data.get("media_type", "image/jpeg")
-        user_context = data.get("context", "")
         
         if not image_base64:
             return jsonify({"error": "No image provided"}), 400
@@ -988,11 +901,8 @@ def extract():
             image_base64 = image_base64.split(",")[1]
         
         # Analyze menu with Claude Vision
-        if user_context:
-            print(f"Analyzing menu with Claude Vision (with context: '{user_context[:50]}...')...")
-        else:
-            print("Analyzing menu with Claude Vision...")
-        wines = analyze_menu_with_claude(image_base64, media_type, user_context)
+        print("Analyzing menu with Claude Vision...")
+        wines = analyze_menu_with_claude(image_base64, media_type)
         
         if not wines:
             return jsonify({
